@@ -1,0 +1,131 @@
+.card {
+  padding: 10px;
+  background: var(--console-iron);
+  border-radius: var(--r-md);
+  margin-bottom: 4px;
+  cursor: grab;
+  position: relative;
+  transition: background var(--dur-state) var(--ease);
+}
+.card:hover { background: var(--console-mist); }
+.card:focus-visible {
+  outline: 2px solid var(--signal-cyan);
+  outline-offset: 2px;
+}
+
+.id {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--console-fog);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Priority pill — single-letter, color carries meaning. */
+.priority {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  letter-spacing: 0.04em;
+  font-family: 'Inter', sans-serif;
+}
+.p0 { background: var(--halt-red); color: var(--console-black); }
+.p1 { background: var(--slow-amber); color: var(--console-black); }
+.p2 { background: var(--console-mist); color: var(--console-fog); }
+.p3 { background: transparent; color: var(--console-smoke); border: 1px solid var(--console-mist); }
+
+/* Relationship chip — shows spawned_from, related count, etc. */
+.relChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--console-smoke);
+  background: var(--console-soot);
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+
+.titleInput {
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--console-snow);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--console-snow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.descInput {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  margin-top: 4px;
+  min-height: 40px;
+  color: var(--console-snow);
+  background: var(--console-soot);
+  border: 1px solid var(--console-mist);
+  border-radius: var(--r-md);
+  padding: 6px 8px;
+}
+
+.desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--console-fog);
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.phaseProgress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.phaseChip {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--console-fog);
+  background: transparent;
+  padding: 0;
+  white-space: nowrap;
+}
+.phaseBar {
+  flex: 1;
+  height: 2px;
+  background: var(--console-mist);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+.phaseBarFill {
+  display: block;
+  height: 100%;
+  background: var(--signal-cyan);
+  transition: width var(--dur-entry) var(--ease);
+}

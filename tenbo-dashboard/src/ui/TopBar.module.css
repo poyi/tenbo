@@ -1,0 +1,78 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header, 50);
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--console-black);
+  border-bottom: 1px solid var(--console-mist);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--console-snow);
+  letter-spacing: -0.005em;
+}
+
+/* Mode nav — DESIGN.md spec: 2px Signal Cyan bottom strut on active, no pill, no fill. */
+.modeToggle {
+  display: flex;
+  gap: 0;
+  height: 100%;
+}
+.modeButton, .modeActive {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--console-fog);
+  cursor: pointer;
+  transition: color var(--dur-state) var(--ease);
+}
+.modeButton:hover, .modeActive:hover { color: var(--console-snow); }
+.modeActive {
+  color: var(--signal-cyan);
+}
+.modeActive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--signal-cyan);
+}
+
+.spacer {
+  flex: 1;
+}
+.validateBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+}
+.label {
+  font-size: 12px;
+  color: var(--console-fog);
+}
+
+/* Center the Reload button vertically with the header */
+.header > :global(.outlined-button) {
+  align-self: center;
+}

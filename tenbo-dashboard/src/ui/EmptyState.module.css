@@ -1,0 +1,11 @@
+.empty {
+  padding: 64px 24px;
+  text-align: center;
+  color: var(--console-fog);
+  font-size: 13px;
+}
+.hint {
+  font-size: 13px;
+  color: var(--console-smoke);
+  margin-top: 8px;
+}

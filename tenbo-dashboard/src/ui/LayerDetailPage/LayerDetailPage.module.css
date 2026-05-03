@@ -1,0 +1,11 @@
+.page { padding: 24px 32px; max-width: 1200px; margin: 0 auto; }
+.back { background: transparent; border: none; color: var(--muted, #888); cursor: pointer; padding: 0; margin-bottom: 16px; font-size: 13px; }
+.title { font-size: 24px; font-weight: 600; margin: 0 0 8px; }
+.statsRow { display: flex; gap: 12px; align-items: baseline; color: var(--muted, #888); font-size: 14px; margin-bottom: 4px; }
+.legendRow { margin-bottom: 24px; }
+.signalSection { border-top: 1px solid var(--border, #2a2a2a); padding: 12px 0; }
+.signalHeader { display: flex; gap: 8px; align-items: center; background: transparent; border: none; color: inherit; cursor: pointer; padding: 0; font: inherit; width: 100%; }
+.caret { color: var(--muted, #888); width: 16px; }
+.signalName { font-weight: 600; }
+.signalCount { color: var(--muted, #888); font-size: 13px; margin-left: auto; }
+.findingList { list-style: none; padding: 8px 0 0 24px; margin: 0; display: flex; flex-direction: column; gap: 4px; }

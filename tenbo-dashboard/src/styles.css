@@ -1,0 +1,228 @@
+/*
+ * Tenbo View — design tokens
+ * Spec: DESIGN.md (north star: "The Side Console")
+ * Console palette is canonical. Legacy semantic vars (--bg, --fg, etc.)
+ * alias to Console tokens so existing component CSS inherits the new look.
+ */
+:root {
+  /* Console stack — neutrals, OKLCH hue 60 (warm rust tint) */
+  --console-black: #1a1816;
+  --console-soot: #211f1c;
+  --console-iron: #2a2724;
+  --console-mist: #36322e;
+  --console-steel: #524c46;
+  --console-smoke: #7a736d;
+  --console-fog: #aba39e;
+  --console-snow: #f1edeb;
+
+  /* Signals — single interactive accent + reserved status colors */
+  --signal-cyan: #4fc3d2;
+  --signal-cyan-deep: #2f96a3;
+  --live-green: #4dc089;
+  --slow-amber: #e8b85b;
+  --halt-red: #e0644f;
+
+  /* Geometry */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-full: 9999px;
+
+  /* Spacing — 8px base, with one half-step */
+  --s-half: 4px;
+  --s-1: 8px;
+  --s-2: 16px;
+  --s-3: 24px;
+  --s-4: 32px;
+  --s-6: 48px;
+  --s-8: 64px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --dur-state: 120ms;
+  --dur-entry: 200ms;
+
+  /* Elevation (modals only) */
+  --shadow-modal: 0 16px 48px -8px rgba(0, 0, 0, 0.6);
+
+  /* Legacy semantic aliases — point at Console tokens */
+  --bg: var(--console-black);
+  --bg-2: var(--console-soot);
+  --fg: var(--console-snow);
+  --muted: var(--console-fog);
+  --border: var(--console-mist);
+  --accent: var(--signal-cyan);
+  --status-now: var(--live-green);
+  --status-next: var(--signal-cyan);
+  --status-later: var(--console-steel);
+  --status-done: var(--console-smoke);
+  --error: var(--halt-red);
+  --warning: var(--slow-amber);
+
+  /* Forward-looking semantic aliases used by individual components */
+  --surface: var(--console-soot);
+  --surface-muted: var(--console-iron);
+  --foreground: var(--console-snow);
+  --text-muted: var(--console-fog);
+  --code-bg: var(--console-iron);
+
+  /* Layering — nav bars sit at 40–50; modals must clear them */
+  --z-drawer: 10;
+  --z-drawer-content: 11;
+  --z-header: 50;
+  --z-modal: 100;
+  --z-modal-content: 101;
+  --z-validate: 110;
+  --z-validate-content: 111;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss03';
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+input, select, textarea {
+  font: inherit;
+  color: var(--fg);
+  background: var(--console-soot);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color var(--dur-state) var(--ease);
+}
+input::placeholder, textarea::placeholder { color: var(--console-smoke); }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--signal-cyan);
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23aba39e' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+hr { border: none; border-top: 1px solid var(--border); }
+:focus-visible { outline: 2px solid var(--signal-cyan); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* Anchor styling — Signal Cyan, no underline reset on bare links */
+a {
+  color: var(--signal-cyan);
+  text-decoration: none;
+  transition: color var(--dur-state) var(--ease);
+}
+a:hover { color: var(--console-snow); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Tab-strip pattern: bare buttons with aria-pressed.
+   Applies wherever the codebase already uses this semantic. */
+nav button[aria-pressed] {
+  padding: 6px 10px;
+  margin-right: 4px;
+  border-radius: var(--r-md);
+  color: var(--console-fog);
+  font-weight: 600;
+  font-size: 13px;
+  transition: background var(--dur-state) var(--ease), color var(--dur-state) var(--ease);
+}
+nav button[aria-pressed]:hover { color: var(--console-snow); background: var(--console-soot); }
+nav button[aria-pressed="true"] { color: var(--console-snow); background: var(--console-iron); }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* Utility classes (used across components) */
+.link-button {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  font: inherit;
+}
+.muted-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+.muted-small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.bare-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.outlined-button {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+  cursor: pointer;
+  font: inherit;
+  transition: background var(--dur-state) var(--ease), border-color var(--dur-state) var(--ease);
+}
+.outlined-button:hover {
+  background: var(--console-soot);
+  border-color: var(--console-steel);
+}
+.close-x {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-md);
+  color: var(--console-fog);
+  cursor: pointer;
+  transition: background var(--dur-state) var(--ease), color var(--dur-state) var(--ease);
+}
+.close-x:hover { background: var(--console-iron); color: var(--console-snow); }
+
+/* icon + label flex utility — gap matches Inter cap-height rhythm */
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Lucide icons inherit text color; align to baseline implicitly via flex */
+.bare-button {
+  display: inline-flex;
+  align-items: center;
+}
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+.dim-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+hr.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}

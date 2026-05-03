@@ -1,0 +1,136 @@
+.wrap {
+  padding: 0 16px 32px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+/* Header */
+.table thead tr {
+  border-bottom: 1px solid var(--console-mist);
+}
+.table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--console-smoke);
+  white-space: nowrap;
+}
+
+/* Column widths */
+.thStatus   { width: 76px; }
+.thId       { width: 110px; }
+.thPriority { width: 80px; }
+.thTitle    { min-width: 240px; }
+.thLayer    { width: 180px; }
+.thType     { width: 90px; }
+
+/* Data rows */
+.row {
+  border-bottom: 1px solid var(--console-mist);
+  cursor: pointer;
+  transition: background var(--dur-state) var(--ease);
+}
+.row:hover { background: var(--console-soot); }
+.row:focus-visible {
+  outline: none;
+  background: var(--console-soot);
+  box-shadow: inset 2px 0 0 var(--signal-cyan);
+}
+.row td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+/* Status badge */
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge_now   { background: color-mix(in srgb, var(--live-green) 15%, transparent);   color: var(--live-green); }
+.badge_next  { background: color-mix(in srgb, var(--signal-cyan) 15%, transparent);  color: var(--signal-cyan); }
+.badge_later { background: color-mix(in srgb, var(--console-steel) 20%, transparent); color: var(--console-fog); }
+.badge_done  { background: color-mix(in srgb, var(--console-smoke) 15%, transparent); color: var(--console-smoke); }
+
+/* ID cell — inner div handles flex so <td> stays a proper table cell */
+.tdId {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.idText {
+  color: var(--console-fog);
+  font-family: 'ui-monospace', 'SFMono-Regular', monospace;
+  font-size: 11px;
+}
+.relChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--console-steel);
+  font-size: 10px;
+}
+
+/* Title cell */
+.titleText {
+  color: var(--console-snow);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Priority chip */
+.priority {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pri_p0 { background: color-mix(in srgb, var(--halt-red) 20%, transparent);   color: var(--halt-red); }
+.pri_p1 { background: color-mix(in srgb, var(--slow-amber) 20%, transparent); color: var(--slow-amber); }
+.pri_p2 { background: color-mix(in srgb, var(--signal-cyan) 15%, transparent); color: var(--signal-cyan); }
+.pri_p3 { background: var(--console-iron); color: var(--console-fog); }
+
+/* Type cell */
+.tdType {
+  color: var(--console-fog);
+  font-size: 11px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* Layer cell */
+.tdLayer {
+  color: var(--console-fog);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.dash { color: var(--console-steel); }
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--console-smoke);
+  font-size: 13px;
+}

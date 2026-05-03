@@ -1,0 +1,26 @@
+<!--
+Continuation brief template. Used when an item has an active workpad (last_updated within
+continuation_window_hours). The full first-turn brief is NOT repeated — assume prior context
+is in thread history. See references/workpad-protocol.md for the continuation-window check.
+
+Replace placeholders and remove this comment before dispatch.
+-->
+
+You are continuing work on **<item-id>: <title>**.
+
+**Workpad:** `<workpad path>`
+**Branch:** `<current branch>` @ `<short-sha>`
+**Last completed (per workpad):** <last-checked plan item, e.g. "1.2 schema validation">
+**Next up (per workpad):** <first unchecked plan item>
+
+The original brief, layer constraints, acceptance criteria, and out-of-scope rules are in your prior turn context. Do NOT restart the plan or re-read files you've already analyzed.
+
+**Reconcile first.** If the workpad and current code disagree (a checked item shows no code evidence, or unchecked items have evidence of completion), surface the mismatch in your report and pause for direction before proceeding.
+
+**Workpad protocol.** Update Plan checkboxes as you complete items. Append a Notes entry (`<YYYY-MM-DD HH:MM>: <one-line progress>`) at meaningful milestones. Add to Confusions only if something was genuinely unclear.
+
+**Completion bar.** Same rules as the prior turn (`references/completion-bar.md`). Report `passed` / `n/a` / `failed: <reason>` per rule in your structured report.
+
+**Out-of-scope discoveries.** Don't expand scope. Surface them under "noticed but not fixed" in the report; Tenbo will route them through the follow-up protocol.
+
+Return the standard structured report (9 sections), with continuation flag set so Tenbo knows partial progress is expected.

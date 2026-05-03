@@ -1,0 +1,93 @@
+/* Sticky secondary nav — sits flush below the 48px TopBar */
+.stickyBar {
+  position: sticky;
+  top: 48px;
+  z-index: 40;
+  background: var(--console-black);
+}
+
+/* Filter + view-toggle row */
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--console-mist);
+}
+
+.filterLabel {
+  font-size: 12px;
+  color: var(--console-smoke);
+  white-space: nowrap;
+}
+
+.filterDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--console-mist);
+  flex-shrink: 0;
+}
+
+.filterSpacer {
+  flex: 1;
+}
+
+.searchInput {
+  width: 180px;
+  /* inherit padding/border/bg from global input rule; only override what differs */
+  background: var(--console-iron);
+  transition: border-color var(--dur-state) var(--ease), width var(--dur-state) var(--ease);
+}
+.searchInput:focus-visible {
+  border-color: var(--signal-cyan);
+  width: 260px;
+}
+
+/* Item counts — far right of filter row */
+.counts {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--console-smoke);
+  white-space: nowrap;
+}
+.counts strong {
+  font-weight: 700;
+  margin-left: 3px;
+}
+.countNow strong  { color: var(--live-green); }
+.countNext strong { color: var(--signal-cyan); }
+.countLater strong { color: var(--console-fog); }
+.countDone strong  { color: var(--console-smoke); }
+
+/* Kanban / List toggle */
+.viewToggle {
+  display: flex;
+  gap: 2px;
+  background: var(--console-iron);
+  border-radius: var(--r-md);
+  padding: 2px;
+}
+
+.viewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: calc(var(--r-md) - 2px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--console-fog);
+  transition: background var(--dur-state) var(--ease), color var(--dur-state) var(--ease);
+}
+
+.viewBtnActive {
+  background: var(--console-mist);
+  color: var(--console-snow);
+}
+
+.viewBtn:hover:not(.viewBtnActive) {
+  color: var(--console-snow);
+}

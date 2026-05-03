@@ -1,0 +1,115 @@
+.root :global(h1) {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--console-snow);
+  margin: 24px 0 12px;
+}
+.root :global(h2) {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--console-snow);
+  margin: 20px 0 8px;
+}
+.root :global(h3) {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--console-snow);
+  margin: 16px 0 4px;
+}
+.root :global(p) {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--console-snow);
+  margin: 0 0 12px;
+  max-width: 75ch;
+}
+.root :global(ul), .root :global(ol) {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--console-snow);
+  padding-left: 22px;
+  margin: 0 0 12px;
+}
+.root :global(li) { margin-bottom: 2px; }
+.root :global(strong) { font-weight: 600; color: var(--console-snow); }
+.root :global(em) {
+  font-style: normal;
+  color: var(--console-snow);
+  background: var(--console-iron);
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+}
+.root :global(code) {
+  background: var(--console-iron);
+  color: var(--console-snow);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+}
+.root :global(pre) {
+  background: var(--console-soot);
+  border: 1px solid var(--console-mist);
+  border-radius: var(--r-md);
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+.root :global(pre code) {
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.root :global(hr) {
+  border: none;
+  border-top: 1px solid var(--console-mist);
+  margin: 16px 0;
+}
+.root :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  table-layout: fixed;
+}
+.root :global(th) {
+  text-align: left;
+  font-weight: 600;
+  color: var(--console-snow);
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--console-mist);
+  white-space: nowrap;
+}
+.root :global(td) {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--console-mist);
+  color: var(--console-snow);
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.root :global(td code) {
+  word-break: break-all;
+}
+.root :global(blockquote) {
+  border-left: 1px solid var(--console-mist);
+  padding-left: 12px;
+  margin: 0 0 12px;
+  color: var(--console-fog);
+  font-style: normal;
+}
+.empty {
+  color: var(--console-smoke);
+  font-style: normal;
+  font-size: 13px;
+  padding: 24px 0;
+}

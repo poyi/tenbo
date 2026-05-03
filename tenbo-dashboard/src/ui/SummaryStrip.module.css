@@ -1,0 +1,18 @@
+.strip {
+  padding: 10px 16px;
+  background: var(--console-soot);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--console-fog);
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--console-mist);
+}
+.strip strong, .strip span[class] {
+  font-weight: 600;
+  margin-left: 4px;
+}
+.now { color: var(--live-green); }
+.next { color: var(--signal-cyan); }
+.done { color: var(--console-smoke); }
