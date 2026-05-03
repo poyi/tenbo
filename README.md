@@ -12,7 +12,7 @@ AI-assisted coding lets you ship features fast. But speed creates a new problem:
 - No one tracks what was built, why, or what's next
 - The codebase grows but the shared understanding of it doesn't
 
-After a few weeks of vibe coding, you have working software and zero navigability. The AI can write code in any file, but neither you nor it can answer "what does this project actually do?" or "what should I work on next?"
+After a few weeks of vibe coding, you have working software and zero navigability. Your AI can re-read the entire codebase to answer "what does this project do?" — but that costs thousands of tokens every session and still misses the decisions that shaped it.
 
 ## How tenbo helps
 
@@ -31,10 +31,11 @@ tenbo is a Claude Code skill that runs alongside your normal coding workflow. It
 
 ## Install the skill
 
-Copy the skill into your project's Claude Code skills directory:
-
 ```bash
-cp -r skill/ your-project/.claude/skills/tenbo/
+# From your project directory
+git clone https://github.com/poyi/tenbo.git /tmp/tenbo
+cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
+rm -rf /tmp/tenbo
 ```
 
 That's it. Start a Claude Code session and tenbo will offer to map your project.
@@ -58,6 +59,8 @@ That's it. Start a Claude Code session and tenbo will offer to map your project.
 
 ## Install the dashboard (optional)
 
+![tenbo dashboard — kanban board view](docs/images/dashboard-kanban.png)
+
 The dashboard gives you a visual UI for browsing roadmaps, triaging items, and reordering work.
 
 ```bash
@@ -65,7 +68,7 @@ The dashboard gives you a visual UI for browsing roadmaps, triaging items, and r
 npx tenbo-dashboard
 ```
 
-Opens at http://localhost:5174. Reads and writes the same `.tenbo/` files — changes sync live with Claude.
+Opens at http://localhost:5174 (or the next available port). Reads and writes the same `.tenbo/` files — changes sync live with Claude.
 
 ### Dashboard CLI tools
 

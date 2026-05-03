@@ -1,5 +1,5 @@
 /**
- * validate-cli.ts — Tenbo validator CLI with diff-based output.
+ * validate-cli.ts — tenbo validator CLI with diff-based output.
  *
  * Default output: summarizes NEW errors / warnings vs the previous run's
  *   `.tenbo/.validation-status.json` snapshot. Pre-existing findings are rolled
@@ -74,14 +74,14 @@ export function renderOutput(snapshot: Snapshot, diff: DiffResult, opts: RenderO
 
   if (opts.verbose) {
     if (snapshot.errors.length) {
-      err.push('Tenbo validation FAILED:');
+      err.push('tenbo validation FAILED:');
       for (const e of snapshot.errors) err.push(`  ❌ ${e.message}`);
     } else {
-      out.push('Tenbo validation: no errors.');
+      out.push('tenbo validation: no errors.');
     }
     if (snapshot.warnings.length) {
       const lines: string[] = [];
-      lines.push(`Tenbo validation warnings (${snapshot.warnings.length}):`);
+      lines.push(`tenbo validation warnings (${snapshot.warnings.length}):`);
       for (const w of snapshot.warnings) lines.push(`  ⚠️ ${w.message}`);
       (snapshot.errors.length ? err : out).push(lines.join('\n'));
     }
@@ -99,13 +99,13 @@ export function renderOutput(snapshot: Snapshot, diff: DiffResult, opts: RenderO
 
   if (newErrors.length === 0 && newWarnings.length === 0) {
     out.push(
-      `Tenbo validation passed (${totalErrors} errors, ${totalWarnings} warnings — all pre-existing). Run with --verbose to list.`,
+      `tenbo validation passed (${totalErrors} errors, ${totalWarnings} warnings — all pre-existing). Run with --verbose to list.`,
     );
     return { stdout: out.join('\n') + '\n', stderr: '', exitCode: 0 };
   }
 
   if (newErrors.length > 0) {
-    err.push(`Tenbo validation FAILED — ${newErrors.length} new error(s):`);
+    err.push(`tenbo validation FAILED — ${newErrors.length} new error(s):`);
     for (const e of newErrors) err.push(`  ❌ ${e.message}`);
     err.push('');
     err.push(
@@ -115,7 +115,7 @@ export function renderOutput(snapshot: Snapshot, diff: DiffResult, opts: RenderO
   }
 
   // newErrors === 0, newWarnings > 0
-  out.push(`Tenbo validation passed with ${newWarnings.length} new warning(s):`);
+  out.push(`tenbo validation passed with ${newWarnings.length} new warning(s):`);
   for (const w of newWarnings) out.push(`  ⚠️ ${w.message}`);
   out.push('');
   out.push(

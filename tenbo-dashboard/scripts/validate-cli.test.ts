@@ -81,7 +81,7 @@ describe('renderOutput — default mode', () => {
     const d = computeDiff(snap([], w), s);
     const r = renderOutput(s, d, {});
     expect(r.exitCode).toBe(0);
-    expect(r.stdout).toMatch(/^Tenbo validation passed \(0 errors, 2 warnings — all pre-existing\)/);
+    expect(r.stdout).toMatch(/^tenbo validation passed \(0 errors, 2 warnings — all pre-existing\)/);
     expect(r.stderr).toBe('');
   });
 
@@ -117,7 +117,7 @@ describe('renderOutput — verbose mode', () => {
     const combined = r.stdout + r.stderr;
     expect(combined).toContain('a');
     expect(combined).toContain('b');
-    expect(combined).toContain('Tenbo validation warnings (2)');
+    expect(combined).toContain('tenbo validation warnings (2)');
   });
 
   it('prints all errors with the FAILED header in verbose mode', () => {
@@ -126,7 +126,7 @@ describe('renderOutput — verbose mode', () => {
     const d = computeDiff(null, s);
     const r = renderOutput(s, d, { verbose: true });
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toContain('Tenbo validation FAILED');
+    expect(r.stderr).toContain('tenbo validation FAILED');
     expect(r.stderr).toContain('e1');
     expect(r.stderr).toContain('e2');
   });

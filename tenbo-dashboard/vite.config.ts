@@ -4,6 +4,6 @@ import { tenboApiPlugin } from './src/api/plugin';
 
 export default defineConfig({
   plugins: [react(), tenboApiPlugin()],
-  server: { port: 5174, strictPort: true },
+  server: { port: 5174 },
   test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },
 });

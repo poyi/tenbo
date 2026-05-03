@@ -11,7 +11,7 @@ interface Props {
 export function TopBar({ mode, onSelectMode, onReload }: Props) {
   return (
     <header className={styles.header}>
-      <strong className={styles.brand}>Tenbo</strong>
+      <strong className={styles.brand}>tenbo</strong>
       <nav className={styles.modeToggle} role="tablist" aria-label="Top-level view">
         <button
           role="tab"

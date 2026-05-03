@@ -1,5 +1,5 @@
 /*
- * Tenbo View — design tokens
+ * tenbo dashboard — design tokens
  * Spec: DESIGN.md (north star: "The Side Console")
  * Console palette is canonical. Legacy semantic vars (--bg, --fg, etc.)
  * alias to Console tokens so existing component CSS inherits the new look.
