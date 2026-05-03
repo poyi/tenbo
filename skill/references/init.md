@@ -1,0 +1,151 @@
+# Initialize Project Memory
+
+*Internal procedure — referenced from SKILL.md "Internal Capability Domains".*
+
+*Maps to: "set up Tenbo", "init Tenbo", session gate offer, or when `.tenbo/` does not exist.*
+
+**Pre-step: maturity assessment.** Run the maturity assessment subroutine (if not
+already run by the session gate). Use repo size to choose the init path.
+
+## Standard init path (repo has source code: size ≥ `small`)
+
+> **Atomic outcome.** This path produces a complete, self-validated project memory in one
+> invocation. Every file listed in step 8 is written unconditionally — there is no "if
+> missing" branch. The agent MUST NOT declare init complete until step 12's checklist
+> passes. Surfacing the post-init bridge (step 11) without first running steps 9 and 10
+> is a defect.
+
+1. **Detect workspaces.** Check `pnpm-workspace.yaml`, `package.json`, `Cargo.toml`,
+   `pyproject.toml`, `go.work`, Lerna/Nx/Turbo. Default: single scope `root`.
+2. **Propose scopes.** List and ask to confirm. If > 3 scopes, ask to pick a subset first.
+   Single scope with >10 top-level directories: offer to init 5–7 most active layers
+   first, add others later. Any project with >200 source files: warn on cost, offer
+   incremental approach.
+3. **Propose 5–10 layers per scope.** Read source tree at depth 2–3. Use product/domain
+   names, not technical patterns. Confirm with user.
+4. **Coverage check.** List uncovered top-level directories. Ask: fold in, new layer, or plumbing?
+5. **Cross-cutting concerns.** Ask once; capture in `workspace.yaml`.
+6. **Jargon scrub.** Check descriptions against `references/plain-english.md` before writing.
+7. **Derive scope prefixes.** Multi-word → initials; ≤5 chars → as-is; >5 chars → first 2 letters.
+   Resolve collisions. Cross-scope always `x`. Confirm.
+8. **Write all files.** Unconditional — every file below is created on every init:
+   - `.tenbo/workspace.yaml` (with `maturity: early`).
+   - `.tenbo/overview.md`.
+   - `.tenbo/principles.md` from template.
+   - `.tenbo/glossary.md` from template (seed with terms specific to the project where
+     obvious; otherwise leave the example term and let it grow).
+   - `.tenbo/roadmap.yaml` (cross-cutting, empty `items: []` is fine).
+   - Per scope: `.tenbo/scopes/<scope>/architecture.yaml` and `roadmap.yaml`.
+   - Per layer: `.tenbo/scopes/<scope>/layers/<layer>/README.md`, `intent.md`, `code-map.md`
+     (skeletons from templates — populating them in depth is deferred to Populate and Plan;
+     creating the skeletons is NOT deferred).
+   - **Glob discipline.** File globs in `architecture.yaml` are RELATIVE to that scope's
+     `path`, not the repo root. If `scope.path: tenbo-dashboard`, write `src/ui/**`, not
+     `tenbo-dashboard/src/ui/**`. Wrong globs silently produce `file_count: 0` in metrics
+     with no validation error. The post-init checklist verifies counts > 0.
+9. **Import existing roadmap.** Scan multiple sources and offer each:
+   - `ROADMAP.md` or `roadmap/` → offer to import.
+   - GitHub issues/milestones via `gh issue list` / `gh milestone list` (if `gh` available).
+   - `TODO`/`FIXME`/`HACK` comments in source via grep.
+   - AI context files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`) for project understanding.
+   Classify per `references/classification-heuristics.md` in batches of 5.
+10. **Compute health + run init-check.** Run, in order:
+    - `npx tenbo-dashboard metrics --all` — populates per-scope `metrics.json` (file counts,
+      lines, doc-drift findings, hotspot signals).
+    - `npx tenbo-dashboard init-check` — strict variant of validate. Errors on any missing
+      init artifact (per-layer `intent.md`/`code-map.md`, `principles.md`, `glossary.md`,
+      `metrics.json` per scope). If this exits non-zero, fix and re-run; do NOT proceed.
+    - `npx tenbo-dashboard validate` — confirms no schema errors or new warnings.
+11. **Bridge with inline health summary + suggested items.** Read every scope's
+    `.tenbo/scopes/<scope>/metrics.json`. Each entry in `findings:` carries `severity`
+    (`critical|warning|info`), `headline` (display-ready string), and
+    `suggestion: { summary, rationale, action_kind }`. The dashboard's Health page
+    reads these same fields — keep parity by surfacing them verbatim, not paraphrased.
+    Compose ONE message in this order:
+    a. One sentence confirming setup. ("Your project is set up — N layers across M scopes.")
+    b. **Inline health summary** (1–3 lines, plain English; not opt-in):
+       - "Health: K critical, J warning, I info." Then up to 3 lines using each finding's
+         `headline` field directly, e.g. *"ui-components: code-map.md references 21
+         non-existent files."*
+       - If `findings: []` and every layer's `file_count > 0`: *"Health looks clean."*
+       - If any layer has `file_count: 0` and the scope has source files: `init-check`
+         will already have flagged this — fix the glob and re-run before sending the
+         bridge.
+    c. **Suggested roadmap items derived from findings** (cap 3, always opt-in):
+       For each critical finding (and threshold-violating warnings), propose ONE item:
+       - `id`: from `npx tenbo-dashboard next-id <scope-prefix>`.
+       - `title`: from `suggestion.summary` (≤60 chars).
+       - `layer`: from finding's `layer` field.
+       - `status: next`, `priority: p2` (or `p1` if severity=critical).
+       - `description`: from `suggestion.rationale` (one sentence).
+       - In `notes:`: prepend "Origin — surfaced by init-health-scan on YYYY-MM-DD." (Sentinel
+         strings are not valid `spawned_from:` values; the schema requires `<prefix>-NNN`.)
+       - `done_when`: derived from finding type — for `doc-drift`: "code-map.md / intent.md
+         no longer surfaces this finding"; for `hotspot-files`: "file split per
+         `details.split_candidates`"; etc.
+       Format the offer: *"I noticed N issues worth tracking. Want me to add: (1) {summary}
+       (2) ... Reply 'all', 'none', or list numbers."* On accept: append to the right
+       `roadmap.yaml`, re-run `validate`, confirm.
+    d. **Bridge to work**: "What are you working on right now?" If imported or accepted
+       items have `now`/`next` status, surface them inline: *"Looks like you have K open
+       items — want to pick one to start on?"*
+12. **Completeness checklist.** Before sending the bridge, walk this list and confirm
+    every item is true. If any item fails, fix and re-walk — do NOT declare init complete.
+    - [ ] `.tenbo/workspace.yaml` exists and lists the scopes.
+    - [ ] `.tenbo/principles.md` and `.tenbo/glossary.md` exist (not zero-byte).
+    - [ ] Each scope has `architecture.yaml` and `roadmap.yaml`.
+    - [ ] Each layer has `README.md`, `intent.md`, and `code-map.md` (skeletons OK).
+    - [ ] Each scope has `metrics.json`, and **no layer with source files shows
+          `file_count: 0`** (a zero indicates a glob path mistake — fix the globs).
+    - [ ] `npx tenbo-dashboard init-check` exits 0.
+    - [ ] `npx tenbo-dashboard validate` reports 0 errors.
+    - [ ] Bridge message includes the inline health summary (step 11b).
+13. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
+14. **Post-init usage hints.** Print 3–5 example prompts tailored to maturity:
+    - **early**: "Try: 'this code is getting messy', 'refresh tenbo', 'what's risky?',
+      'fill in architecture for [layer]'"
+    Show once after init, never repeat.
+
+## Intent-first init path (repo is empty or scaffold: size < `small`)
+
+When the source tree is empty or near-empty (<5 source files), skip source-scanning
+and use a conversation-driven approach:
+
+1. **Detect workspaces** (same as standard path).
+2. **Propose scopes** (same as standard path; usually just `root`).
+3. **Ask intent.** "What are you building? Who is it for?" (one question, not a form).
+4. **Propose 3–5 layers** based on the user's description. Use product/domain names
+   (e.g., "Player Management", "Combat", "Inventory"), not technical patterns.
+   Set `files: []` on all layers with comment `# populated as you create files`.
+5. **Skip** coverage check and cross-cutting concerns — nothing to cover yet.
+6. **Jargon scrub** (same as standard path).
+7. **Derive scope prefixes** (same as standard path).
+8. **Write minimal files.** `workspace.yaml` (with `maturity: new`), `architecture.yaml`
+   (with empty globs), `roadmap.yaml`, one `README.md` per layer.
+   Do NOT create `overview.md`, `glossary.md`, or `principles.md` — these are offered
+   later when maturity bumps to `early` or `active`.
+9. **Seed starter roadmap.** Propose 3–5 roadmap items as `next` status based on the
+   user's description. These are conversation-derived, not code-derived.
+10. **Validate + bridge.** Run validator, then: "Here's what I'd tackle first. Want to
+    start on one?"
+11. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
+12. **Post-init usage hints.** Print:
+    "Try: 'what should I build next?', 'track this idea', 'what does this project do?'"
+
+## Cross-cutting roadmap
+
+`.tenbo/roadmap.yaml` for items spanning scopes. Prefix `x-NNN`. Cross-scope `affects:`
+uses `[scope-id:layer-id]`. Create from template if absent.
+
+## Ceremony reduction
+
+Applies ONLY when the intent-first init path was used (repo size < `small`) OR the
+project has ≤4 layers and <50 source files. Standard init always writes the full set
+of files (step 8) regardless of maturity.
+- Skip: cross-cutting concerns, sub-layers.
+- Skip: workpads for items (use lightweight completion only).
+- Skip: dispatch templates and subagent protocol.
+- Use a simplified completion bar: just `done_when` evidence + no new validation errors.
+Offer to "grow into" full features when layer count exceeds 5 or a layer exceeds
+100 files: "Your project is getting bigger. Want me to start tracking architectural
+boundaries?"

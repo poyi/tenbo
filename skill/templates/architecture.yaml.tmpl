@@ -6,6 +6,12 @@
 #   - `description` is mandatory and must be readable by a non-engineer.
 #   - `files` is for the agent's benefit; never shown to non-engineers.
 #   - Optional `parent` field promotes a layer into a sub-layer (depth 2 max).
+#
+# IMPORTANT — globs are RELATIVE to this scope's `path` (from workspace.yaml),
+# NOT the repo root. If `scope.path` is `tenbo-dashboard`, write `src/ui/**`,
+# not `tenbo-dashboard/src/ui/**`. Getting this wrong silently produces
+# `file_count: 0` in metrics.json with no validation error. Run
+# `npx tenbo-dashboard metrics --all` after editing to verify counts > 0.
 
 layers:
   - id: example-layer

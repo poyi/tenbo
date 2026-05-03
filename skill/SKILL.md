@@ -153,87 +153,13 @@ Read once per session. Skip when answering a single narrow question.
 
 *Maps to: "set up Tenbo", "init Tenbo", session gate offer, or when `.tenbo/` does not exist.*
 
-**Pre-step: maturity assessment.** Run the maturity assessment subroutine (if not
-already run by the session gate). Use repo size to choose the init path.
+> **Procedure body:** load `references/init.md`. Contains the maturity assessment, the
+> standard init path (atomic outcome — full file scaffolding, metrics, init-check, inline
+> health summary, suggested items, completeness checklist), the intent-first init path for
+> empty repos, and the ceremony-reduction rules for tiny projects.
 
-#### Standard init path (repo has source code: size ≥ `small`)
-
-1. **Detect workspaces.** Check `pnpm-workspace.yaml`, `package.json`, `Cargo.toml`,
-   `pyproject.toml`, `go.work`, Lerna/Nx/Turbo. Default: single scope `root`.
-2. **Propose scopes.** List and ask to confirm. If > 3 scopes, ask to pick a subset first.
-   Single scope with >10 top-level directories: offer to init 5–7 most active layers
-   first, add others later. Any project with >200 source files: warn on cost, offer
-   incremental approach.
-3. **Propose 5–10 layers per scope.** Read source tree at depth 2–3. Use product/domain
-   names, not technical patterns. Confirm with user.
-4. **Coverage check.** List uncovered top-level directories. Ask: fold in, new layer, or plumbing?
-5. **Cross-cutting concerns.** Ask once; capture in `workspace.yaml`.
-6. **Jargon scrub.** Check descriptions against `references/plain-english.md` before writing.
-7. **Derive scope prefixes.** Multi-word → initials; ≤5 chars → as-is; >5 chars → first 2 letters.
-   Resolve collisions. Cross-scope always `x`. Confirm.
-8. **Write files.** `workspace.yaml` (with `maturity: early`), `architecture.yaml` +
-   `roadmap.yaml` per scope, `README.md` per layer, `overview.md`.
-9. **Import existing roadmap.** Scan multiple sources and offer each:
-   - `ROADMAP.md` or `roadmap/` → offer to import.
-   - GitHub issues/milestones via `gh issue list` / `gh milestone list` (if `gh` available).
-   - `TODO`/`FIXME`/`HACK` comments in source via grep.
-   - AI context files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`) for project understanding.
-   Classify per `references/classification-heuristics.md` in batches of 5.
-10. **Validate + confirm + bridge.** Run validator, fix warnings. Then:
-    "Your project is set up with N layers. Architecture docs will fill in as you
-    work — or you can ask me to document a specific area anytime."
-    Immediately bridge: "What are you working on right now?" If imported items
-    have `now` status, surface those: "Looks like you have N open items. Want to
-    pick one to start on?"
-11. **Schema check.** If missing v2 files (`intent.md`/`code-map.md`, `principles.md`,
-    `glossary.md`): create them from templates, then offer to populate
-    architecture docs via Populate and Plan.
-12. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
-13. **Post-init usage hints.** Print 3–5 example prompts tailored to maturity:
-    - **early**: "Try: 'this code is getting messy', 'refresh tenbo', 'what's risky?',
-      'fill in architecture for [layer]'"
-    Show once after init, never repeat.
-
-#### Intent-first init path (repo is empty or scaffold: size < `small`)
-
-When the source tree is empty or near-empty (<5 source files), skip source-scanning
-and use a conversation-driven approach:
-
-1. **Detect workspaces** (same as standard path).
-2. **Propose scopes** (same as standard path; usually just `root`).
-3. **Ask intent.** "What are you building? Who is it for?" (one question, not a form).
-4. **Propose 3–5 layers** based on the user's description. Use product/domain names
-   (e.g., "Player Management", "Combat", "Inventory"), not technical patterns.
-   Set `files: []` on all layers with comment `# populated as you create files`.
-5. **Skip** coverage check and cross-cutting concerns — nothing to cover yet.
-6. **Jargon scrub** (same as standard path).
-7. **Derive scope prefixes** (same as standard path).
-8. **Write minimal files.** `workspace.yaml` (with `maturity: new`), `architecture.yaml`
-   (with empty globs), `roadmap.yaml`, one `README.md` per layer.
-   Do NOT create `overview.md`, `glossary.md`, or `principles.md` — these are offered
-   later when maturity bumps to `early` or `active`.
-9. **Seed starter roadmap.** Propose 3–5 roadmap items as `next` status based on the
-   user's description. These are conversation-derived, not code-derived.
-10. **Validate + bridge.** Run validator, then: "Here's what I'd tackle first. Want to
-    start on one?"
-11. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
-12. **Post-init usage hints.** Print:
-    "Try: 'what should I build next?', 'track this idea', 'what does this project do?'"
-
-**Cross-cutting roadmap.** `.tenbo/roadmap.yaml` for items spanning scopes. Prefix `x-NNN`.
-Cross-scope `affects:` uses `[scope-id:layer-id]`. Create from template if absent.
-
-**Ceremony reduction.** When `maturity` is `new` or `early`, or the project has ≤4 layers
-and <50 source files:
-- Skip: cross-cutting concerns, sub-layers, glossary, principles.md, metrics.json.
-- Skip: workpads for items (use lightweight completion only).
-- Skip: dispatch templates and subagent protocol.
-- Use a simplified completion bar: just `done_when` evidence + no new validation errors.
-Offer to "grow into" full features when layer count exceeds 5 or a layer exceeds
-100 files: "Your project is getting bigger. Want me to start tracking architectural
-boundaries?"
-
----
+The procedure was extracted from this file to keep SKILL.md compact (sk-002). It is the
+single source of truth for setup behavior — when in doubt, read it before acting.
 
 ### Work Intake and Planning
 
@@ -303,112 +229,10 @@ For broad queries ("show me the roadmap"): suggest the dashboard (`npx tenbo-das
 
 *Maps to: "I finished X", "just shipped X", or after any coding task.*
 
-**Short-circuit gate — run FIRST:**
-1. If `.tenbo/` does not exist → exit silently.
-2. `git diff --name-only`: if no changed paths intersect any layer's `files` globs → exit silently.
-3. Proceed only when at least one path matches.
-
-#### No roadmap item
-
-Run `references/reconciliation.md`. Mechanical updates apply silently with a one-line
-summary. Judgment calls use the universal prompting rule.
-
-#### Maps to a roadmap item (agent coded directly)
-
-> **Gate:** `status: done` flips only after the completion bar passes
-> (`references/completion-bar.md`). Steps 1–6 produce the evidence the bar checks;
-> step 7 runs the bar; step 8 marks done.
-
-1. **Test prompt** (feature/bug only). "Does this have a test? Want a reminder?" Non-blocking.
-2. **Layer narrative.** Re-read `README.md`. Edit only if it no longer fits. Skip for internal changes.
-3. **Architectural content** (universal prompting rule for judgment):
-   - Responsibilities/boundaries changed → edit `intent.md`.
-   - Files added/removed/renamed or deps changed → update `code-map.md` mechanically.
-   - Structural shift → append dated boundary-decision entry to `intent.md`.
-   - Per layer in `affects:`: repeat steps 2–3 only.
-   - **Stamp `doc_update`:** edited → ISO date. Internal-only → `skipped — <reason>`.
-4. **Validate.** Diff against prior snapshot; surface only new warnings.
-5. **Principle self-check.** Load layer constraints (see subroutine). Surface violations
-   with exact rule quoted.
-6. **Run reconciliation** (`references/reconciliation.md`).
-7. **Run the completion bar** (`references/completion-bar.md`). All rules must pass.
-   On failure: surface the specific rule, fix or seek user input, re-run the bar.
-   On override: user must explicitly invoke; record `bar_override: <reason>` on the row.
-8. **Mark done.** Set `status: done`. Archive spec if `links:` points into `.tenbo/specs/`.
-   Archive workpad to `.tenbo/workpads/archive/<item-id>.md` if present.
-   Phased: mark only the matching phase; archive spec/workpad when all phases done.
-9. **Health note.** If metrics/validation already in context show a breach: one plain-English
-   warning. At most once per session.
-10. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
-
-#### Rework path
-
-*Maps to: "this approach isn't working", "let's start over on X", or after explicit user
-direction to reset.*
-
-When a user invokes rework on an item:
-1. Confirm intent (rework is a hard reset, not a course correction).
-2. Bump `dispatch_attempts` on the row (init to 1 if absent).
-3. Move the existing workpad to `.tenbo/workpads/archive/<item-id>-attempt-<N>.md` where
-   `<N>` is the prior `dispatch_attempts` value.
-4. Create a fresh workpad from the template. Auto-prepend a "Lessons from prior attempt(s)"
-   section using the archived workpad's Confusions and trailing Notes (see
-   `references/workpad-protocol.md` → "Rework handling").
-5. Reset Plan and AC checkboxes (AC text seeds from current `done_when:`).
-6. Surface to the user: "Reset workpad. Lessons from attempt N at the top. Continue?"
-7. If `dispatch_attempts >= 3` after the bump, surface the chronic-rework warning (validator
-   rule). The item may need scoping change or design rethink, not another attempt.
-
-#### Subagent coded the work
-
-Work from the structured report. **Branch on continuation flag first:**
-
-- **Continuation report** (partial progress expected). The subagent finished a turn but
-  hasn't completed all `done_when:` bullets. Item stays `now`. Steps:
-  1. Verify workpad updates: Plan checkboxes match what the report claims; Notes entry appended.
-  2. Apply mechanical doc updates from the report (code-map.md row adds/removes).
-  3. Surface follow-ups (noticed but not fixed) — fold, create new item, or discard.
-  4. Ask: "Continue with another turn, or stop here?" Don't run the bar yet.
-
-- **Final report** (subagent claims work is complete). Steps:
-  1. Verify subagent's bar claims (report's per-rule `passed`/`n/a`/`failed` statements).
-     Cross-check `done_when` evidence; check matching workpad ACs.
-  2. Narrative update if approach changed what the layer does.
-  3. Boundary decision entry if report shows structural shift.
-  4. `doc_update` stamp: subagent edited → verify + stamp date. Subagent declined with reason →
-     cross-check files list; if claim holds, stamp `skipped — <reason>`. Report omits field →
-     deliverable failure; re-dispatch or apply yourself before flipping to done.
-  5. Glossary candidates (see subroutine). Validate. Principle self-check. Run reconciliation.
-  6. **Run the completion bar.** On failure → re-dispatch with the specific gap, or apply
-     yourself before proceeding. Override only on explicit user direction (record `bar_override:`).
-  7. **Mark done.** Set `status: done`. Test prompt (feature/bug only). Archive spec and workpad.
-  8. Follow-ups (formal protocol): for each "noticed but not fixed" entry in the report,
-     run classification heuristics → propose layer/scope; generate a fully-enriched item
-     (id, title, description, type, priority, `files_to_read`, `done_when`, `risks`); set
-     `spawned_from: <current-item-id>`. Present as a batch picker: "(a) accept all,
-     (b) reject all, (c) review one-by-one." Accepted items append to the appropriate
-     roadmap; rejected entries are discarded — no ghost retention.
-
-**Dispatch template.** Choose first-turn or continuation per the continuation-dispatch
-subroutine (see `references/subroutines.md` → "Continuation Dispatch Decision").
-
-**First-turn brief.** When the item is dispatched fresh (no active workpad, or workpad stale,
-or no prior subagent thread context), include: item id, spec/done_when, workpad path if
-present (subagent updates Plan checkboxes and appends Notes during work), in-scope
-deliverables, out-of-scope, constraints, verification commands, doc-update requirement
-("update code-map.md and intent.md if surfaces changed; say so explicitly if internal-only"),
-completion-bar verification requirement (`references/completion-bar.md` — subagent reports
-`passed` / `n/a` / `failed: <reason>` per bar rule), and request a structured report with:
-(1) files changed, (2) approach, (3) acceptance criteria status, (4) verification result,
-(5) noticed but not fixed, (6) open questions, (7) doc updates applied or "no surface
-changed because <reason>", (8) workpad sections updated, (9) completion bar status per rule.
-
-**Continuation brief.** When the item has an active workpad within `continuation_window_hours`
-and prior subagent thread context exists, render `templates/continuation-brief.md.tmpl` instead.
-The continuation brief is terse — it points to the workpad as state and assumes the original
-brief is in thread history. Same structured-report shape, plus continuation flag.
-
----
+> **Procedure body:** load `references/completion-sync.md`. Contains the short-circuit
+> gate, the no-roadmap-item path (reconciliation), the agent-coded path with completion-bar
+> gating, the rework path (hard reset, dispatch_attempts handling), and the subagent-coded
+> path (continuation vs final report, dispatch templates).
 
 ### Populate and Plan
 
@@ -455,134 +279,10 @@ Load `references/migrate-docs.md` when triggered.
 *Maps to: "complete all next items", "run the roadmap", "batch execute",
 "knock out the next 5 items", "work through everything".*
 
-Orchestrates multiple roadmap items by dispatching each to a Claude Code
-subagent via the `Agent` tool. The main conversation acts as a lightweight
-orchestrator — it reads the roadmap, dispatches work, validates reports, and
-tracks completion. Each subagent gets its own context window with only the
-files relevant to that item, keeping token usage efficient.
-
-#### Prerequisites
-
-- `.tenbo/` must exist with at least one scope and populated `roadmap.yaml`.
-- Each target item SHOULD have `done_when:` populated. Items without it get
-  a warning before dispatch: "[title] has no acceptance criteria — skip or
-  add criteria first?"
-- Architecture docs (`intent.md`) SHOULD be populated for each target layer.
-  If empty, offer the auto-populate flow (Tier 2 subroutine) before dispatch.
-
-#### Target selection
-
-1. Read all `roadmap.yaml` files. Collect items matching the user's intent:
-   - "all next items" → `status: next` (promote each to `now` on dispatch).
-   - "all now items" → `status: now`.
-   - "next N items" → top N by priority then file order.
-   - Specific items by id or title.
-2. **Dependency filter.** Exclude items whose `spawned_from:` parent is still
-   `now` (in-progress). Warn: "Skipping [id] — blocked by [parent-id]."
-3. **Conflict filter.** If two items share an `affects:` layer, flag: "[id-a]
-   and [id-b] both touch [layer]. Run sequentially to avoid conflicts?"
-   Default yes; user can override to parallel.
-4. Present the batch: "Ready to execute N items: [list with titles]. Go?"
-   User can reorder, drop items, or confirm.
-
-#### Execution loop
-
-Process items sequentially by default (parallel only when user explicitly
-confirms non-overlapping items).
-
-For each item:
-
-1. **Promote status.** If `status: next`, flip to `now`.
-2. **Prepare dispatch.** Run the Continuation Dispatch Decision subroutine
-   (`references/subroutines.md`) to choose first-turn or continuation brief.
-3. **Create workpad** if the item is substantial and lacks one (see
-   `references/workpad-protocol.md` → "When to create").
-4. **Build the subagent prompt.** Render the dispatch brief (first-turn or
-   continuation template) with full item context: id, title, description,
-   `done_when:`, `files_to_read:`, `risks:`, layer constraints (Tier 2),
-   verification commands, doc-update requirement, completion-bar rules, and
-   the 9-section structured report format.
-5. **Dispatch via `Agent` tool:**
-   ```
-   Agent(
-     prompt: "<rendered dispatch brief>",
-     description: "<item-id>: <title>",
-     model: "sonnet"  // or user preference
-   )
-   ```
-   The subagent has access to `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`
-   — full coding capability scoped to the workspace.
-6. **Receive structured report.** The subagent returns the 9-section report
-   (files changed, approach, AC status, verification, noticed-but-not-fixed,
-   open questions, doc updates, workpad updates, completion bar per rule).
-7. **Validate.** Run the existing **"Subagent coded the work"** flow from
-   Completion and Sync:
-   - Branch on continuation flag (partial vs final report).
-   - Cross-check `done_when:` evidence against report claims.
-   - Verify completion bar rules.
-   - Apply doc updates (`code-map.md`, `intent.md`, `doc_update` stamp).
-   - Process follow-ups (noticed but not fixed → new items via
-     classification heuristics, set `spawned_from:`).
-8. **Mark done or handle failure:**
-   - **Bar passes** → `status: done`. Archive workpad and spec. Log success.
-   - **Bar fails, fixable** → attempt self-fix (apply the missing piece
-     directly), re-run bar. If still fails → skip item, flag for user.
-   - **Bar fails, not fixable** → if `dispatch_attempts < 3`, re-dispatch
-     with the specific gap. Otherwise skip and flag chronic rework.
-9. **Progress update.** After each item: "Completed [N/total]: [title]. ✓"
-   or "Skipped [title]: [reason]."
-
-#### Completion summary
-
-After all items processed:
-
-"Batch complete. N of M items done. K skipped [reasons]. Follow-ups
-captured: [count]."
-
-If any items were skipped, list them with reasons so the user can address
-them manually.
-
-#### Parallel execution (opt-in)
-
-When the user confirms non-overlapping items can run in parallel, dispatch
-multiple subagents simultaneously using `run_in_background: true`:
-
-```
-Agent(
-  prompt: "<brief for item A>",
-  description: "ed-045: Add input validation",
-  run_in_background: true
-)
-Agent(
-  prompt: "<brief for item B>",
-  description: "ed-046: Refactor storage layer",
-  run_in_background: true
-)
-```
-
-Collect results as each subagent completes. Validate each report in the
-order they finish. If a parallel subagent's changes conflict with another
-(detected via `git status` or overlapping files in reports), flag the
-conflict and resolve sequentially.
-
-#### Guardrails
-
-- **Max batch size.** Default 10 items per batch. Warn if user requests more:
-  "That's N items — this will take a while and use significant tokens.
-  Continue, or pick a subset?"
-- **Cost awareness.** After the first item completes, report approximate
-  token usage. If extrapolated batch cost exceeds a reasonable threshold,
-  pause: "First item used ~Xk tokens. Full batch would be ~Yk. Continue?"
-- **Escape hatch.** User can say "stop" at any point between items to halt
-  the loop. Already-dispatched background agents continue; results are
-  collected and validated when they return.
-- **No nesting.** Subagents spawned via `Agent` cannot spawn further
-  subagents (Claude Code constraint). Each subagent is a leaf executor.
-- **Branch safety.** All work happens on the current branch. If the user is
-  on a non-main branch, apply the existing branch-awareness warning once
-  before the batch starts.
-
----
+> **Procedure body:** load `references/batch-execute.md`. Contains the prerequisites,
+> target selection, sequential execution loop with subagent dispatch, completion summary,
+> opt-in parallel execution, and guardrails (max batch size, cost awareness, escape hatch,
+> no nesting, branch safety).
 
 ### Health Review and Recommendations
 
@@ -651,23 +351,59 @@ Compact phrasing — always offer picks: "(a) different name, (b) update glossar
 
 *Maps to: "update tenbo", "check for tenbo updates", "is tenbo up to date?"*
 
-1. Read the local version from `VERSION` (in the skill directory, sibling of this file).
-2. Fetch the latest version from GitHub:
-   ```
-   curl -sL https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION
-   ```
-3. Compare. If identical: "tenbo is up to date (v0.1.0)." Stop.
-4. If newer version available, confirm: "tenbo v[new] is available (you have v[old]). Update?"
-5. On confirmation:
-   ```
-   git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo-update
-   cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/
-   rm -rf /tmp/tenbo-update
-   ```
-6. Report: "Updated tenbo to v[new]."
+Tenbo has TWO update surfaces — the skill (GitHub) and the dashboard CLI (npm). Self-Update
+checks both and keeps them in lockstep so a fresh-skill + stale-dashboard combination cannot
+cause silent "command not found" failures inside init.
 
-The update only replaces skill files (SKILL.md, references, templates). It never touches
-the project's `.tenbo/` directory — all project data is safe.
+### VERSION file format
+
+`skill/VERSION` is YAML with two fields:
+```yaml
+skill: 0.2.0
+min_dashboard: 0.1.0
+```
+- `skill:` — the skill's own semver.
+- `min_dashboard:` — the lowest dashboard CLI version this skill is known to work with.
+  Bumped only when the skill begins requiring a new CLI command or behavior.
+
+### Procedure
+
+1. **Read local versions.**
+   - Skill: parse `skill/VERSION`. Extract `skill:` and `min_dashboard:`.
+   - Dashboard: `npx --no-install tenbo-dashboard --version` (catch ENOENT → not installed).
+2. **Fetch remote versions.**
+   - Skill: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION`.
+     Parse the same YAML shape. Tolerate the legacy single-line format (just a version string)
+     by treating the whole file as `skill:` and assuming `min_dashboard: 0.0.0`.
+   - Dashboard: `npm view tenbo-dashboard version --json` (5s timeout). On network failure,
+     report "could not check npm registry" and continue with skill-only update.
+3. **Compare with semver, not string equality.** Use the standard precedence (0.2.0 > 0.1.5).
+4. **Compute the action.**
+   - Skill behind remote → propose skill update.
+   - Dashboard installed and behind npm latest → propose dashboard update.
+   - Skill remote `min_dashboard` > installed dashboard → REQUIRE dashboard update first
+     (or refuse skill update with: "Updating the skill to v[new] requires dashboard ≥ v[min].
+     You have v[have]. Update dashboard first?").
+   - Dashboard not installed at all → flag in the report; do not block skill update.
+   - Both up to date → "tenbo is up to date (skill v[s], dashboard v[d])." Stop.
+5. **Confirm with the user.** One message listing what will change:
+   *"Updates available: skill v[old] → v[new], dashboard v[old] → v[new]. Apply?"*
+6. **On confirmation, run updates in this order:**
+   a. **Dashboard first** (if needed). Detect install scope:
+      - Global: `npm install -g tenbo-dashboard@latest`. On EACCES, suggest `sudo` or
+        the local-install fallback; do not auto-elevate.
+      - Local-to-project: `npm install tenbo-dashboard@latest --prefix <project>` if a
+        local install is detected (e.g., the project has its own `node_modules/tenbo-dashboard`).
+      - If `npm` itself is missing: report and stop.
+   b. **Skill second** (if needed). `git clone --depth 1 https://github.com/poyi/tenbo.git
+      /tmp/tenbo-update && cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/ &&
+      rm -rf /tmp/tenbo-update`.
+7. **Verify.** Re-read both versions. Report: *"Updated: skill v[new], dashboard v[new]."*
+   If a step failed, report which one and what to do.
+
+The update only replaces skill files (SKILL.md, references, templates) and the
+`tenbo-dashboard` package binary. It never touches the project's `.tenbo/` directory —
+all project data is safe.
 
 ---
 
