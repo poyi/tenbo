@@ -105,6 +105,24 @@ tenbo maintains a `.tenbo/` directory in your repo:
 
 All files are plain YAML and Markdown — human-readable, version-controlled, and editable by hand.
 
+## Updating
+
+Just ask your AI assistant:
+
+```
+"Update tenbo"
+```
+
+tenbo checks for newer versions on GitHub, confirms the update, and replaces the skill files. Your project data in `.tenbo/` is never touched.
+
+Or update manually:
+
+```bash
+git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo
+cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
+rm -rf /tmp/tenbo
+```
+
 ## Requirements
 
 - **Skill**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code).

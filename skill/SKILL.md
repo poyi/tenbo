@@ -70,7 +70,8 @@ Just talk naturally:
 | "Work on the next item" / "continue the roadmap"         | Populate and Plan → execute path              |
 | "Complete all next items", "run the roadmap", "batch      | Batch Execute                                 |
 |  execute", "work through everything", "knock out N items" |                                               |
-| "Start over on X" / "this approach isn't working"        | Completion and Sync → rework path             |
+|| "Start over on X" / "this approach isn't working"        | Completion and Sync → rework path             |
+|| "Update tenbo" / "check for tenbo updates"                | Self-Update                                   |
 
 When a message spans multiple signals, handle the primary intent first and passively
 capture the secondary signal.
@@ -643,6 +644,30 @@ boundary-decision entries, `done_when` from approved plans, metric computations.
 
 Compact phrasing — always offer picks: "(a) different name, (b) update glossary,
 (c) confirm reuse."
+
+---
+
+## Self-Update
+
+*Maps to: "update tenbo", "check for tenbo updates", "is tenbo up to date?"*
+
+1. Read the local version from `VERSION` (in the skill directory, sibling of this file).
+2. Fetch the latest version from GitHub:
+   ```
+   curl -sL https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION
+   ```
+3. Compare. If identical: "tenbo is up to date (v0.1.0)." Stop.
+4. If newer version available, confirm: "tenbo v[new] is available (you have v[old]). Update?"
+5. On confirmation:
+   ```
+   git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo-update
+   cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/
+   rm -rf /tmp/tenbo-update
+   ```
+6. Report: "Updated tenbo to v[new]."
+
+The update only replaces skill files (SKILL.md, references, templates). It never touches
+the project's `.tenbo/` directory — all project data is safe.
 
 ---
 
