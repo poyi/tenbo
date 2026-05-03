@@ -18,3 +18,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# tenbo local project management (dogfooding)
+.tenbo/
+.claude/
