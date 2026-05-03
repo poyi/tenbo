@@ -1,5 +1,7 @@
 # tenbo
 
+[![npm](https://img.shields.io/npm/v/tenbo-dashboard)](https://www.npmjs.com/package/tenbo-dashboard)
+
 An agentic project manager for AI-assisted coding. tenbo gives your AI coding assistant a persistent project memory — it tracks architecture, roadmaps, and priorities so you can build fast without losing the plot.
 
 ## The problem
