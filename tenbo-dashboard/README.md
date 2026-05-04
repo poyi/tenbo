@@ -47,9 +47,9 @@ npx tenbo-dashboard --version         # Print the installed version
 
 ## What is tenbo?
 
-A Claude Code skill that gives your AI coding assistant persistent project memory — architecture docs, roadmaps, and health signals that survive across sessions. The dashboard is the optional visual companion; the skill is the always-on conversational brain.
+An AI cofounder that gives your coding assistant persistent project memory — architecture docs, roadmaps, and health signals that survive across sessions. Available as a Claude Code skill and as a Cursor rule package; both editors share the same `.tenbo/` data and the same companion dashboard. The dashboard is the optional visual companion; the skill / rule is the always-on conversational brain.
 
-Install the skill: [github.com/poyi/tenbo](https://github.com/poyi/tenbo)
+Install: [github.com/poyi/tenbo](https://github.com/poyi/tenbo) (instructions for both Claude Code and Cursor)
 
 ## License
 

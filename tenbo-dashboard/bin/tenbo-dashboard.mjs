@@ -38,6 +38,7 @@ const commands = {
   'next-id': 'scripts/next-id.ts',
   metrics: 'scripts/compute-metrics.ts',
   'init-check': 'scripts/init-check.ts',
+  sync: 'scripts/sync.ts',
 };
 
 function run(script, scriptArgs) {
@@ -65,6 +66,7 @@ tenbo-dashboard — local architecture dashboard for .tenbo/ repos
 
 Usage:
   tenbo-dashboard                  Launch the dashboard (http://localhost:5174)
+  tenbo-dashboard sync             Refresh tenbo state after a change (metrics + init-check + validate, surfaces new findings)
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
   tenbo-dashboard next-id <prefix> Allocate next roadmap item ID
