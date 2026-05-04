@@ -38,12 +38,13 @@ summary. Judgment calls use the universal prompting rule.
 8. **Mark done.** Set `status: done`. Archive spec if `links:` points into `.tenbo/specs/`.
    Archive workpad to `.tenbo/workpads/archive/<item-id>.md` if present.
    Phased: mark only the matching phase; archive spec/workpad when all phases done.
-9. **Refresh health data.** Run `npx tenbo-dashboard metrics --all` so per-scope
-   `metrics.json` reflects the post-change file counts, LOC, and findings. Without this,
-   the dashboard's Health page (and the next session's briefing) will show stale data.
-   Cheap — do not skip.
-10. **Health note.** If the just-refreshed metrics show a NEW breach (severity >= warning,
-    not present in the prior snapshot): one plain-English warning. At most once per session.
+9. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
+   plain `sync` if changes spanned multiple scopes). This recomputes metrics,
+   re-runs init-check, re-validates, AND surfaces any NEW critical/warning findings
+   inline — in one command. Without this, the dashboard's Health page (and the
+   next session's briefing) will show stale data. Cheap — do not skip.
+10. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
+    through verbatim as a one-liner to the user. At most once per session.
 11. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
 
 ## Rework path

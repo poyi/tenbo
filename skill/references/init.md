@@ -49,13 +49,12 @@ already run by the session gate). Use repo size to choose the init path.
    - `TODO`/`FIXME`/`HACK` comments in source via grep.
    - AI context files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`) for project understanding.
    Classify per `references/classification-heuristics.md` in batches of 5.
-10. **Compute health + run init-check.** Run, in order:
-    - `npx tenbo-dashboard metrics --all` — populates per-scope `metrics.json` (file counts,
-      lines, doc-drift findings, hotspot signals).
-    - `npx tenbo-dashboard init-check` — strict variant of validate. Errors on any missing
-      init artifact (per-layer `intent.md`/`code-map.md`, `principles.md`, `glossary.md`,
-      `metrics.json` per scope). If this exits non-zero, fix and re-run; do NOT proceed.
-    - `npx tenbo-dashboard validate` — confirms no schema errors or new warnings.
+10. **Compute health + run init-check + validate (one command).**
+    `npx tenbo-dashboard sync` — runs metrics for every scope, then init-check,
+    then validate, in that order. Exits non-zero if any step fails. Surfaces
+    new critical/warning findings inline so init can't silently produce a
+    half-set-up project. If this exits non-zero, fix and re-run; do NOT
+    proceed past this step.
 11. **Bridge with inline health summary + suggested items.** Read every scope's
     `.tenbo/scopes/<scope>/metrics.json`. Each entry in `findings:` carries `severity`
     (`critical|warning|info`), `headline` (display-ready string), and
@@ -97,8 +96,7 @@ already run by the session gate). Use repo size to choose the init path.
     - [ ] Each layer has `README.md`, `intent.md`, and `code-map.md` (skeletons OK).
     - [ ] Each scope has `metrics.json`, and **no layer with source files shows
           `file_count: 0`** (a zero indicates a glob path mistake — fix the globs).
-    - [ ] `npx tenbo-dashboard init-check` exits 0.
-    - [ ] `npx tenbo-dashboard validate` reports 0 errors.
+    - [ ] `npx tenbo-dashboard sync` exits 0.
     - [ ] Bridge message includes the inline health summary (step 11b).
 13. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
 14. **Post-init usage hints.** Print 3–5 example prompts tailored to maturity:

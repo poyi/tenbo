@@ -200,6 +200,13 @@ with no progress — keep working, demote to `next`, or split?"
    child items each with `done_when`; confirm before appending. **Spec-file fallback**
    (spike, design decision, atomic migration) → create `.tenbo/specs/<item-id>-<slug>.md`
    with `tenbo_item:` frontmatter + TL;DR section (max 4 sentences); append to `links:`.
+
+   **Phases vs child items:** when proposing the breakdown, apply the rule from
+   `references/batch-execute.md` → "Granularity": phases share files/state/ordering,
+   child items don't. **If the units are independent, prefer child items via
+   `spawned_from:` so Batch Execute can dispatch them as separate subagents.** Phases
+   never parallelize today — they always run serially under one subagent. Use phases
+   only when the work genuinely is one logical chunk that ships together.
 3. **Workpad** for substantial items (or any item the user is about to start working on
    actively): create `.tenbo/workpads/<item-id>.md` from `templates/workpad.md.tmpl`; set
    `workpad:` on the row; seed Acceptance Criteria from `done_when:` and Plan from
@@ -351,59 +358,79 @@ Compact phrasing — always offer picks: "(a) different name, (b) update glossar
 
 *Maps to: "update tenbo", "check for tenbo updates", "is tenbo up to date?"*
 
-Tenbo has TWO update surfaces — the skill (GitHub) and the dashboard CLI (npm). Self-Update
-checks both and keeps them in lockstep so a fresh-skill + stale-dashboard combination cannot
-cause silent "command not found" failures inside init.
+Tenbo has up to THREE update surfaces — the Claude Code skill (`.claude/skills/tenbo/`),
+the Cursor rule package (`.cursor/rules/tenbo*.mdc`), and the dashboard CLI (npm).
+Self-Update detects which surfaces exist locally, checks each against its remote, and
+keeps them in lockstep so a fresh-skill/rule + stale-dashboard combination cannot cause
+silent "command not found" failures inside init.
 
 ### VERSION file format
 
-`skill/VERSION` is YAML with two fields:
+Both `skill/VERSION` and `cursor/VERSION` are YAML with two fields. The same min_dashboard
+floor applies to both surfaces.
 ```yaml
-skill: 0.2.0
-min_dashboard: 0.1.0
+# skill/VERSION
+skill: 0.3.0
+min_dashboard: 0.3.0
 ```
-- `skill:` — the skill's own semver.
-- `min_dashboard:` — the lowest dashboard CLI version this skill is known to work with.
-  Bumped only when the skill begins requiring a new CLI command or behavior.
+```yaml
+# cursor/VERSION
+rule: 0.3.0
+min_dashboard: 0.3.0
+```
+- `skill:` / `rule:` — the package's own semver.
+- `min_dashboard:` — the lowest dashboard CLI version this package is known to work with.
+  Bumped only when the package begins requiring a new CLI command or behavior.
 
 ### Procedure
 
-1. **Read local versions.**
-   - Skill: parse `skill/VERSION`. Extract `skill:` and `min_dashboard:`.
-   - Dashboard: `npx --no-install tenbo-dashboard --version` (catch ENOENT → not installed).
-2. **Fetch remote versions.**
+1. **Detect installed surfaces.**
+   - Skill installed if `.claude/skills/tenbo/` exists.
+   - Cursor rule installed if `.cursor/rules/tenbo.mdc` exists (or any `tenbo*.mdc` in that dir).
+   - Dashboard installed if `npx --no-install tenbo-dashboard --version` returns cleanly.
+2. **Read local versions** for each detected surface.
+   - Skill: parse `.claude/skills/tenbo/VERSION`.
+   - Cursor: parse `.cursor/rules/tenbo-VERSION` (named with the `tenbo-` prefix to avoid
+     collision with other rule packages installed in the same `.cursor/rules/` directory).
+   - Dashboard: `npx --no-install tenbo-dashboard --version`.
+3. **Fetch remote versions.**
    - Skill: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION`.
-     Parse the same YAML shape. Tolerate the legacy single-line format (just a version string)
-     by treating the whole file as `skill:` and assuming `min_dashboard: 0.0.0`.
-   - Dashboard: `npm view tenbo-dashboard version --json` (5s timeout). On network failure,
-     report "could not check npm registry" and continue with skill-only update.
-3. **Compare with semver, not string equality.** Use the standard precedence (0.2.0 > 0.1.5).
-4. **Compute the action.**
-   - Skill behind remote → propose skill update.
-   - Dashboard installed and behind npm latest → propose dashboard update.
-   - Skill remote `min_dashboard` > installed dashboard → REQUIRE dashboard update first
-     (or refuse skill update with: "Updating the skill to v[new] requires dashboard ≥ v[min].
-     You have v[have]. Update dashboard first?").
-   - Dashboard not installed at all → flag in the report; do not block skill update.
-   - Both up to date → "tenbo is up to date (skill v[s], dashboard v[d])." Stop.
-5. **Confirm with the user.** One message listing what will change:
-   *"Updates available: skill v[old] → v[new], dashboard v[old] → v[new]. Apply?"*
-6. **On confirmation, run updates in this order:**
+   - Cursor: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/cursor/VERSION`.
+   - Dashboard: `npm view tenbo-dashboard version --json` (5s timeout). On network failure
+     for any surface: report and continue with the surfaces that succeeded.
+   - Tolerate legacy single-line VERSION files (treat whole file as `skill:`/`rule:` and
+     assume `min_dashboard: 0.0.0`).
+4. **Compare with semver, not string equality.** Use the standard precedence (0.3.0 > 0.2.5).
+5. **Compute the action.**
+   - Each detected surface behind its remote → propose update for that surface.
+   - Any package's remote `min_dashboard` > installed dashboard → REQUIRE dashboard update
+     first (or refuse the package update with: "Updating the [skill/rule] to v[new] requires
+     dashboard ≥ v[min]. You have v[have]. Update dashboard first?").
+   - Dashboard not installed at all → flag in the report; do not block other updates.
+   - All up to date → "tenbo is up to date (skill v[s], rule v[r], dashboard v[d])." Stop.
+6. **Confirm with the user.** One message listing what will change:
+   *"Updates available: skill v[old] → v[new], rule v[old] → v[new], dashboard v[old] → v[new]. Apply?"*
+7. **On confirmation, run updates in this order:**
    a. **Dashboard first** (if needed). Detect install scope:
       - Global: `npm install -g tenbo-dashboard@latest`. On EACCES, suggest `sudo` or
         the local-install fallback; do not auto-elevate.
       - Local-to-project: `npm install tenbo-dashboard@latest --prefix <project>` if a
-        local install is detected (e.g., the project has its own `node_modules/tenbo-dashboard`).
+        local install is detected.
       - If `npm` itself is missing: report and stop.
-   b. **Skill second** (if needed). `git clone --depth 1 https://github.com/poyi/tenbo.git
-      /tmp/tenbo-update && cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/ &&
-      rm -rf /tmp/tenbo-update`.
-7. **Verify.** Re-read both versions. Report: *"Updated: skill v[new], dashboard v[new]."*
+   b. **Skill / rule second** (if needed). For each surface that needs updating:
+      ```
+      git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo-update
+      # Skill, if installed:
+      cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/
+      # Cursor rule, if installed:
+      cp -r /tmp/tenbo-update/cursor/. .cursor/rules/    # flat copy of all .mdc + templates
+      rm -rf /tmp/tenbo-update
+      ```
+8. **Verify.** Re-read all updated versions. Report: *"Updated: skill v[new], rule v[new], dashboard v[new]."*
    If a step failed, report which one and what to do.
 
-The update only replaces skill files (SKILL.md, references, templates) and the
-`tenbo-dashboard` package binary. It never touches the project's `.tenbo/` directory —
-all project data is safe.
+The update only replaces skill / rule package files and the `tenbo-dashboard` package binary.
+It never touches the project's `.tenbo/` directory — all project data is safe.
 
 ---
 

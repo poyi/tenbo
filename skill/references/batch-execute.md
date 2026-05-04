@@ -11,6 +11,59 @@ orchestrator — it reads the roadmap, dispatches work, validates reports, and
 tracks completion. Each subagent gets its own context window with only the
 files relevant to that item, keeping token usage efficient.
 
+## Granularity: phases vs child items
+
+Batch Execute dispatches **one subagent per item**. Phased items (a single
+item with `phases: []`) run serially under one subagent — phases never
+parallelize. The decision rule:
+
+> **If phases share files, state, or required ordering → use `phases:`.
+> If phases are independent units of work → split into child items via
+> `spawned_from:` so Batch Execute can dispatch them as separate subagents
+> (sequentially today; parallel later if guards allow).**
+
+When in doubt: ask "could phase N and phase M run on different machines
+without coordination?" If yes, they're child items in disguise.
+
+### Worked examples
+
+**Phases (right call):**
+A multi-phase migration where phase 1 is "data model + schema migration",
+phase 2 is "rewrite read paths to new model", phase 3 is "rewrite write
+paths". Phase 2 and 3 read state phase 1 produced. Files overlap heavily
+(every read/write call site). Strict ordering. Phases — done.
+
+**Child items (right call, even though it feels like one task):**
+"Add OAuth, Google + GitHub + Apple providers." Each provider touches
+its own provider file, its own settings panel section, its own redirect
+handler. Almost no shared files. Independent verification. → Three
+child items (`x-001`, `x-002`, `x-003`) with `spawned_from: <parent>`.
+
+**Borderline (sk-001 in this repo, retroactive analysis):**
+sk-001 was created with 5 phases: (1) glob warning in template, (2)
+SKILL.md init rewrite, (3) `init-check` CLI, (4) finding-suggestion
+logic in skill, (5) parity verification. Phases 1, 2, 3 share NO files
+(template / SKILL.md / dashboard scripts). Phase 4 was folded into
+phase 2 (same file). Phase 5 was read-only verification. Under the rule
+above, the right shape was: parent item `sk-001` with three child items
+(`sk-001a` glob warning, `sk-001b` skill rewrite + suggestions, `sk-001c`
+init-check CLI), no phases. The verification step disappears into the
+parent's `done_when`. Today this is a documentation lesson; with the
+sequential-only execution model it didn't change wall-clock time, but
+it would have made the work parallelizable and clearer in the kanban.
+
+### Why no parallel phase dispatch (yet)
+
+A `parallel: true` flag on phased items would require: phase-level
+`depends_on:` and `touches:` schema, a dispatch DAG, file-conflict
+detection, partial-failure recovery, and rollup status while phases are
+in flight. That's weeks of machinery for a use case child items already
+handle correctly today. If parallelism becomes a real bottleneck, the
+right next step is to make Batch Execute dispatch child items in
+parallel (with the same guards already specified below) — not to grow
+phases into a parallel scheduler. See sk-003 in this repo's roadmap for
+the design discussion.
+
 ## Prerequisites
 
 - `.tenbo/` must exist with at least one scope and populated `roadmap.yaml`.
@@ -82,12 +135,23 @@ For each item:
 9. **Progress update.** After each item: "Completed [N/total]: [title]. ✓"
    or "Skipped [title]: [reason]."
 
+## Refresh between items
+
+After each item's `Mark done` step (Completion and Sync), run
+`npx tenbo-dashboard sync` (with `--scope <id>` if only one scope was
+touched). This is the same command Completion and Sync's step 9 invokes
+when an item is closed individually — keep parity. The wrapper command
+does metrics + init-check + validate in one shot and surfaces NEW
+critical/warning findings inline, so the next item dispatches against
+fresh state.
+
 ## Completion summary
 
-After all items processed:
+After all items processed, run a final `npx tenbo-dashboard sync` for
+the full workspace, then:
 
 "Batch complete. N of M items done. K skipped [reasons]. Follow-ups
-captured: [count]."
+captured: [count]. Health: [sync's summary line]."
 
 If any items were skipped, list them with reasons so the user can address
 them manually.
