@@ -1,0 +1,203 @@
+---
+description: >
+  Procedure for batch-executing roadmap items via subagents. Load when user says 'complete all next items', 'run the roadmap', 'batch execute', 'work through everything', or 'knock out N items'.
+alwaysApply: false
+---
+
+# Batch Execute
+
+*Internal procedure — referenced from SKILL.md "Internal Capability Domains".*
+
+*Maps to: "complete all next items", "run the roadmap", "batch execute",
+"knock out the next 5 items", "work through everything".*
+
+Orchestrates multiple roadmap items by dispatching each to a Claude Code
+subagent via the `Agent` tool. The main conversation acts as a lightweight
+orchestrator — it reads the roadmap, dispatches work, validates reports, and
+tracks completion. Each subagent gets its own context window with only the
+files relevant to that item, keeping token usage efficient.
+
+## Granularity: phases vs child items
+
+Batch Execute dispatches **one subagent per item**. Phased items (a single
+item with `phases: []`) run serially under one subagent — phases never
+parallelize. The decision rule:
+
+> **If phases share files, state, or required ordering → use `phases:`.
+> If phases are independent units of work → split into child items via
+> `spawned_from:` so Batch Execute can dispatch them as separate subagents
+> (sequentially today; parallel later if guards allow).**
+
+When in doubt: ask "could phase N and phase M run on different machines
+without coordination?" If yes, they're child items in disguise.
+
+### Worked examples
+
+**Phases (right call):**
+A multi-phase migration where phase 1 is "data model + schema migration",
+phase 2 is "rewrite read paths to new model", phase 3 is "rewrite write
+paths". Phase 2 and 3 read state phase 1 produced. Files overlap heavily
+(every read/write call site). Strict ordering. Phases — done.
+
+**Child items (right call, even though it feels like one task):**
+"Add OAuth, Google + GitHub + Apple providers." Each provider touches
+its own provider file, its own settings panel section, its own redirect
+handler. Almost no shared files. Independent verification. → Three
+child items (`x-001`, `x-002`, `x-003`) with `spawned_from: <parent>`.
+
+**Borderline (sk-001 in this repo, retroactive analysis):**
+sk-001 was created with 5 phases: (1) glob warning in template, (2)
+SKILL.md init rewrite, (3) `init-check` CLI, (4) finding-suggestion
+logic in skill, (5) parity verification. Phases 1, 2, 3 share NO files
+(template / SKILL.md / dashboard scripts). Phase 4 was folded into
+phase 2 (same file). Phase 5 was read-only verification. Under the rule
+above, the right shape was: parent item `sk-001` with three child items
+(`sk-001a` glob warning, `sk-001b` skill rewrite + suggestions, `sk-001c`
+init-check CLI), no phases. The verification step disappears into the
+parent's `done_when`. Today this is a documentation lesson; with the
+sequential-only execution model it didn't change wall-clock time, but
+it would have made the work parallelizable and clearer in the kanban.
+
+### Why no parallel phase dispatch (yet)
+
+A `parallel: true` flag on phased items would require: phase-level
+`depends_on:` and `touches:` schema, a dispatch DAG, file-conflict
+detection, partial-failure recovery, and rollup status while phases are
+in flight. That's weeks of machinery for a use case child items already
+handle correctly today. If parallelism becomes a real bottleneck, the
+right next step is to make Batch Execute dispatch child items in
+parallel (with the same guards already specified below) — not to grow
+phases into a parallel scheduler. See sk-003 in this repo's roadmap for
+the design discussion.
+
+## Prerequisites
+
+- `.tenbo/` must exist with at least one scope and populated `roadmap.yaml`.
+- Each target item SHOULD have `done_when:` populated. Items without it get
+  a warning before dispatch: "[title] has no acceptance criteria — skip or
+  add criteria first?"
+- Architecture docs (`intent.md`) SHOULD be populated for each target layer.
+  If empty, offer the auto-populate flow (Tier 2 subroutine) before dispatch.
+
+## Target selection
+
+1. Read all `roadmap.yaml` files. Collect items matching the user's intent:
+   - "all next items" → `status: next` (promote each to `now` on dispatch).
+   - "all now items" → `status: now`.
+   - "next N items" → top N by priority then file order.
+   - Specific items by id or title.
+2. **Dependency filter.** Exclude items whose `spawned_from:` parent is still
+   `now` (in-progress). Warn: "Skipping [id] — blocked by [parent-id]."
+3. **Conflict filter.** If two items share an `affects:` layer, flag: "[id-a]
+   and [id-b] both touch [layer]. Run sequentially to avoid conflicts?"
+   Default yes; user can override to parallel.
+4. Present the batch: "Ready to execute N items: [list with titles]. Go?"
+   User can reorder, drop items, or confirm.
+
+## Execution loop
+
+Process items sequentially by default (parallel only when user explicitly
+confirms non-overlapping items).
+
+For each item:
+
+1. **Promote status.** If `status: next`, flip to `now`.
+2. **Prepare dispatch.** Run the Continuation Dispatch Decision subroutine
+   (`tenbo-subroutines.mdc`) to choose first-turn or continuation brief.
+3. **Create workpad** if the item is substantial and lacks one (see
+   `tenbo-workpad-protocol.mdc` → "When to create").
+4. **Build the subagent prompt.** Render the dispatch brief (first-turn or
+   continuation template) with full item context: id, title, description,
+   `done_when:`, `files_to_read:`, `risks:`, layer constraints (Tier 2),
+   verification commands, doc-update requirement, completion-bar rules, and
+   the 9-section structured report format.
+5. **Dispatch via `Agent` tool:**
+   ```
+   Agent(
+     prompt: "<rendered dispatch brief>",
+     description: "<item-id>: <title>",
+     model: "sonnet"  // or user preference
+   )
+   ```
+   The subagent has access to `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`
+   — full coding capability scoped to the workspace.
+6. **Receive structured report.** The subagent returns the 9-section report
+   (files changed, approach, AC status, verification, noticed-but-not-fixed,
+   open questions, doc updates, workpad updates, completion bar per rule).
+7. **Validate.** Run the existing **"Subagent coded the work"** flow from
+   `tenbo-completion-sync.mdc`:
+   - Branch on continuation flag (partial vs final report).
+   - Cross-check `done_when:` evidence against report claims.
+   - Verify completion bar rules.
+   - Apply doc updates (`code-map.md`, `intent.md`, `doc_update` stamp).
+   - Process follow-ups (noticed but not fixed → new items via
+     classification heuristics, set `spawned_from:`).
+8. **Mark done or handle failure:**
+   - **Bar passes** → `status: done`. Archive workpad and spec. Log success.
+   - **Bar fails, fixable** → attempt self-fix (apply the missing piece
+     directly), re-run bar. If still fails → skip item, flag for user.
+   - **Bar fails, not fixable** → if `dispatch_attempts < 3`, re-dispatch
+     with the specific gap. Otherwise skip and flag chronic rework.
+9. **Progress update.** After each item: "Completed [N/total]: [title]. ✓"
+   or "Skipped [title]: [reason]."
+
+## Refresh between items
+
+After each item's `Mark done` step (Completion and Sync), run
+`npx tenbo-dashboard sync` (with `--scope <id>` if only one scope was
+touched). This is the same command Completion and Sync's step 9 invokes
+when an item is closed individually — keep parity. The wrapper command
+does metrics + init-check + validate in one shot and surfaces NEW
+critical/warning findings inline, so the next item dispatches against
+fresh state.
+
+## Completion summary
+
+After all items processed, run a final `npx tenbo-dashboard sync` for
+the full workspace, then:
+
+"Batch complete. N of M items done. K skipped [reasons]. Follow-ups
+captured: [count]. Health: [sync's summary line]."
+
+If any items were skipped, list them with reasons so the user can address
+them manually.
+
+## Parallel execution (opt-in)
+
+When the user confirms non-overlapping items can run in parallel, dispatch
+multiple subagents simultaneously using `run_in_background: true`:
+
+```
+Agent(
+  prompt: "<brief for item A>",
+  description: "ed-045: Add input validation",
+  run_in_background: true
+)
+Agent(
+  prompt: "<brief for item B>",
+  description: "ed-046: Refactor storage layer",
+  run_in_background: true
+)
+```
+
+Collect results as each subagent completes. Validate each report in the
+order they finish. If a parallel subagent's changes conflict with another
+(detected via `git status` or overlapping files in reports), flag the
+conflict and resolve sequentially.
+
+## Guardrails
+
+- **Max batch size.** Default 10 items per batch. Warn if user requests more:
+  "That's N items — this will take a while and use significant tokens.
+  Continue, or pick a subset?"
+- **Cost awareness.** After the first item completes, report approximate
+  token usage. If extrapolated batch cost exceeds a reasonable threshold,
+  pause: "First item used ~Xk tokens. Full batch would be ~Yk. Continue?"
+- **Escape hatch.** User can say "stop" at any point between items to halt
+  the loop. Already-dispatched background agents continue; results are
+  collected and validated when they return.
+- **No nesting.** Subagents spawned via `Agent` cannot spawn further
+  subagents (Claude Code constraint). Each subagent is a leaf executor.
+- **Branch safety.** All work happens on the current branch. If the user is
+  on a non-main branch, apply the existing branch-awareness warning once
+  before the batch starts.

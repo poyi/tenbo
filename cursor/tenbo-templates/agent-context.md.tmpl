@@ -1,0 +1,55 @@
+# Tenbo Agent Context (auto-generated — do not edit)
+
+Generated: {{timestamp}}
+Scopes: {{scope_list}}
+Maturity: {{maturity}}
+
+## Active Work
+{{#now_items}}
+- {{id}}: {{title}} ({{layer}}, {{days_active}}d)
+{{/now_items}}
+{{^now_items}}
+No items in progress.
+{{/now_items}}
+
+## Up Next
+{{#next_items}}
+- {{id}}: {{title}}
+{{/next_items}}
+{{^next_items}}
+No items queued.
+{{/next_items}}
+
+## Hot Layers
+{{#hot_layers}}
+- {{name}}: {{reason}}
+{{/hot_layers}}
+{{^hot_layers}}
+No layers with recent activity.
+{{/hot_layers}}
+
+## Entry Points
+{{#entry_points}}
+- {{file}} ({{layer}})
+{{/entry_points}}
+
+## Health
+Pending reconciliation: {{pending_count}}
+Validation warnings: {{warning_count}}
+{{#stale_items}}
+
+## Stale
+{{#stale_now}}
+- ⚠️ {{id}}: {{title}} — `now` for {{days_active}}d (threshold: {{threshold}}d)
+{{/stale_now}}
+{{#stale_next}}
+- {{id}}: {{title}} — `next` untouched for {{days_inactive}}d
+{{/stale_next}}
+{{/stale_items}}
+{{#active_workpads}}
+
+## Resume
+{{#workpads}}
+- {{item_id}}: {{title}} — workpad has {{unchecked_count}} unchecked plan items
+{{/workpads}}
+{{/active_workpads}}

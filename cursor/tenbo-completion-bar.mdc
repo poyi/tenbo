@@ -1,0 +1,95 @@
+---
+description: >
+  The completion bar — gate that an item passes before status flips to done. Load when running the completion procedure or when user asks 'what counts as done?'
+alwaysApply: false
+---
+
+# Completion Bar
+
+The atomic checklist that gates `status: done` for any roadmap item. Tenbo runs this in Completion and Sync before flipping status. If any rule fails, surface the failure and either fix it or stop — do not flip silently.
+
+Subagents performing work on Tenbo's behalf MUST verify the bar in their report. The dispatch template requires it.
+
+---
+
+## The bar
+
+An item MUST satisfy all of these before `status: done`:
+
+1. **`done_when:` evidence.** Every `done_when:` bullet has a corresponding completed signal — a checked workpad Plan or Acceptance Criteria item, OR (for lightweight items without a workpad) explicit confirmation from the user or subagent report.
+2. **Workpad acceptance.** If a workpad exists, all Acceptance Criteria checkboxes are checked, OR each unchecked AC has a "deferred — `<reason>`" note immediately below it.
+3. **Workpad validation.** If a workpad exists, all Validation checkboxes are checked, OR validation is documented as N/A in a note.
+4. **`doc_update` stamp.** Field is present: ISO date if surfaces changed, `skipped — <reason>` if internal-only. Required for feature/bug/refactor items.
+5. **No new validation errors.** Diff against the prior `.validation-status.json` snapshot — no new errors since the item entered `now`. (Pre-existing errors are observations, not blockers.)
+6. **No unresolved reconciliation entries** for this item's layer in `.tenbo/.pending-reconciliation.yaml`.
+7. **Principle self-check passed.** Layer constraints loaded; no surfaced violations against this item's diff.
+8. **Test prompt offered** (feature/bug only, non-blocking). The prompt itself doesn't gate; *whether it was offered* does.
+
+---
+
+## Failure handling
+
+When a rule fails, Tenbo presents the specific failure(s) in plain language and offers paths:
+
+- "AC items 2 and 4 in the workpad are unchecked. Want to (a) check them now if they're actually done, (b) add a 'deferred' note, or (c) keep working?"
+- "`doc_update` is missing. Internal-only change? I'll stamp `skipped — internal refactor`. Or did `code-map.md` change?"
+
+The bar is meant to surface drift, not punish. Most failures resolve in one round.
+
+---
+
+## Bar override
+
+When the user explicitly bypasses the bar:
+
+- User must say it explicitly ("mark done anyway", "override the bar", "skip the check") — never implicit.
+- Tenbo records `bar_override: <reason>` on the roadmap row. Example:
+  ```yaml
+  bar_override: "shipped under deadline; AC item 3 deferred to ed-058"
+  ```
+- The validator surfaces overridden items in health checks (rule 47) so they're not invisible.
+- The user-facing summary acknowledges the override: "Marked done with bar override (`<reason>`)."
+
+Override is for genuine edge cases — production fires, end-of-sprint deadlines, intentional MVP cuts. Routine "skip it" is a smell that AC was wrong, not that the bar is.
+
+---
+
+## Subagent verification
+
+The dispatch template requires subagents to verify the bar in their structured report. The report's "acceptance criteria status" item must explicitly state, per bar rule, one of:
+- `passed` — rule satisfied, evidence cited.
+- `n/a` — rule doesn't apply (e.g., bar item 8 on a refactor).
+- `failed: <reason>` — rule unsatisfied, with specifics.
+
+If the report says all `passed` but the verification (Tenbo cross-checks) shows otherwise, treat as deliverable failure: re-dispatch with explicit fix instructions, or apply the missing piece yourself before flipping to done.
+
+---
+
+## Lightweight items
+
+Items without a workpad still go through the bar — bar rules 2 and 3 (workpad AC, workpad Validation) become N/A. The remaining rules (1, 4–8) still apply.
+
+For pure trivia (typo fix, single-line change), the bar collapses to rules 4 (doc_update — usually `skipped — internal-only`), 5 (no new errors), and 7 (principle check). Don't theatricalize — one sentence confirming the bar is enough.
+
+---
+
+## Phased items
+
+For inline-phased items (single workpad with phase prefixes), the bar runs once per phase transition to `done`:
+
+- Phase rule 1: `done_when:` for *that phase only* has evidence.
+- Workpad rules 2, 3: AC/Validation items prefixed with that phase number are checked.
+- Other rules apply at the item level (validation, reconciliation, principle check).
+
+The full bar runs again when the item itself flips from phased-in-progress to fully `done`.
+
+For phase-as-task items (each phase is its own row with `spawned_from:`), the bar runs per child item normally.
+
+---
+
+## Anti-patterns
+
+- **Don't run the bar before work is actually done.** It's a gate, not a planning tool.
+- **Don't treat the bar as ceremonial.** When a rule fails, fix the underlying gap — don't just override.
+- **Don't override silently.** No `bar_override:` field set means no override happened, period.
+- **Don't add to the bar for one-off concerns.** Project-specific gates belong in `principles.md`, not here.

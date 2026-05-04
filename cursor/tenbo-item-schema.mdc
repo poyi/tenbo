@@ -1,0 +1,31 @@
+---
+description: >
+  Schema for roadmap items (fields, types, conventions, optional features). Load when creating, editing, or designing roadmap items.
+alwaysApply: false
+---
+
+# Roadmap Item Fields
+
+Optional fields items in `roadmap.yaml` may carry:
+
+- `links:` — array of paths (relative to repo root) to plans/specs for this item.
+- `notes:` — markdown string with timestamped context notes.
+- `doc_update:` — ISO date (`2026-04-28`) or `skipped — <reason>`; required for `done` items of type feature/bug/refactor. The validator warns when absent.
+- `spawned_from:` — id of the item that surfaced this one.
+- `related:` — peer item ids (not parent–child).
+- `phases:` — `[{ id, title, status, completed_at?, notes? }]` for multi-phase items. Item-level `status` is derived when `phases:` is present.
+- `affects:` — `[layer-id]` (same scope) or `[scope-id:layer-id]` (cross-scope).
+- `done_when:` — 1–3 plain-English bullets defining done.
+- `files_to_read:` — repo-relative paths an implementer should read first.
+- `risks:` — known unknowns or complicating factors.
+- `priority:` — `p0` (critical) / `p1` (high) / `p2` (normal) / `p3` (low). Advisory only — does not affect ordering.
+- `type:` — `feature` / `bug` / `refactor` / `spike`.
+- `workpad:` — repo-relative path to a workpad file (e.g., `.tenbo/workpads/ed-045.md`). Created for substantial items at plan-path triage. See `workpad-protocol.md`.
+- `dispatch_attempts:` — integer, incremented when an item enters `rework` after a prior attempt failed. Validator surfaces items with `dispatch_attempts >= 3` to flag chronic difficulty. Items with status `rework` are mid-reset; the workpad has been archived and a fresh one created. See SKILL.md "Rework path".
+- `bar_override:` — string reason set when the user explicitly bypasses the completion bar. Validator surfaces overridden items in health checks. See `completion-bar.md`.
+
+**Spec files:** When creating a plan or spec, include `tenbo_item: <id>` in the file's frontmatter and append its path to the item's `links:`.
+
+**Notes:** When the user adds context ("note on X: …"), append a timestamped bullet to `notes:`.
+
+**Workpad vs. notes:** `notes:` is for short context bullets the user dictates inline. `workpad:` is the structured living document Tenbo authors for substantial in-flight work. Lightweight items use `notes:` only; substantial items use both, with workpad as the durable execution state.

@@ -1,0 +1,39 @@
+# {{name}}
+
+{{description}}
+
+<!--
+This file is `<layer-id>/README.md` — the plain-English narrative for the layer.
+Plain-English discipline applies: avoid jargon, keep sentences readable to a non-engineer.
+
+For deeper technical content (architecture, schemas, tool references, etc.), add
+sibling `*.md` files in this directory (e.g., `architecture.md`, `tools-reference.md`).
+Those are NOT subject to the plain-English jargon scrub.
+-->
+
+## What it does
+
+<2–4 sentences describing the layer's purpose from a non-engineer's perspective. Use a concrete example of what a user does and what this layer makes possible.>
+
+## Sub-concerns
+
+<Optional. Bullet list of internal concerns within this layer in plain language. Only include if the layer is large enough that sub-concerns help comprehension. Keep each bullet to one line.
+
+RULES:
+- No code identifiers, function names, type names, file paths, or backticks. This section is for the non-engineer reader.
+- If you would write `manage_tokens` or `someFunction()`, find a non-symbol description: "the action that edits tokens".
+- Each bullet is plain English, one line, no jargon.>
+
+- **<Sub-concern A>** — <one-line plain-English description>
+- **<Sub-concern B>** — <one-line plain-English description>
+
+## Pending work
+
+<This section is rendered from roadmap.yaml when displayed. Leave a note pointing the reader there, or list active items inline.>
+
+See `../../roadmap.yaml` for items tagged to this layer.
+
+## Deep dives
+
+<Optional. Listed automatically by the viewer from sibling `*.md` files in this directory.
+You don't need to maintain this list manually — the viewer renders it.>

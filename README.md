@@ -28,10 +28,15 @@ tenbo is a Claude Code skill that runs alongside your normal coding workflow. It
 
 ## What's in this repo
 
-- **`skill/`** — The Claude Code skill (SKILL.md + references + templates). This is the core of tenbo.
-- **`tenbo-dashboard/`** — An optional local web dashboard for visual roadmap browsing, item triage, and drag-reorder. Published to npm as `tenbo-dashboard`.
+- **`skill/`** — The Claude Code skill (SKILL.md + references + templates).
+- **`cursor/`** — The Cursor rule package (multiple flat `.mdc` files, mirroring the skill). Same content, Cursor-native frontmatter.
+- **`tenbo-dashboard/`** — An optional local web dashboard for visual roadmap browsing, item triage, and drag-reorder. Published to npm as `tenbo-dashboard`. Editor-agnostic — works for both Claude Code and Cursor users.
 
-## Install the skill
+## Install
+
+Two install paths depending on your editor. Both use the same `.tenbo/` data on disk and the same companion dashboard, so a project set up in one editor is portable to the other.
+
+### Install for Claude Code
 
 ```bash
 # From your project directory
@@ -42,9 +47,35 @@ rm -rf /tmp/tenbo
 
 That's it. Start a Claude Code session and tenbo will offer to map your project.
 
-### What happens next
+### Install for Cursor
 
-1. Claude detects the skill and offers to set up tenbo ("Want me to map the project structure?")
+```bash
+# From your project directory
+git clone https://github.com/poyi/tenbo.git /tmp/tenbo
+mkdir -p .cursor/rules
+cp -r /tmp/tenbo/cursor/. .cursor/rules/
+rm -rf /tmp/tenbo
+```
+
+That's it. Open Cursor, mention what you're building, and tenbo's rule activates automatically (it's an Agent Requested rule — Cursor's agent loads it based on intent).
+
+> **Allowlist tip for Cursor:** to avoid permission prompts when tenbo runs CLI commands, add `npx tenbo-dashboard *` to Cursor's auto-run allowlist (Settings → Features → Agent → Auto-run).
+
+#### If tenbo doesn't activate
+
+Cursor's Agent Requested mode loads rules based on intent inferred from the message. It's mostly invisible, but a few patterns are worth knowing if the agent doesn't pick up tenbo when you'd expect:
+
+| Reliability | What to type |
+|---|---|
+| **Most reliable** — phrases that mention "tenbo" by name | `"set up tenbo"`, `"refresh tenbo"`, `"update tenbo"`, `"tenbo, track this: <idea>"`, `"what does tenbo say I should build next?"`, `"populate tenbo for [layer]"` |
+| **Mostly reliable** — natural-language phrases (Claude-Code-style) | `"what should I build next?"`, `"this code is getting messy"`, `"finished the auth system"`, `"can this scale to multiplayer?"` |
+| **Always works** — explicit `@`-mention | `@tenbo` (forces the entry rule into context; from there the intent router takes over) |
+
+If you find natural-language phrases consistently miss in your Cursor setup, mention "tenbo" explicitly or `@tenbo` once at the start — both prime the rule for the rest of the session.
+
+### What happens next (both editors)
+
+1. The agent detects the skill / rule and offers to set up tenbo ("Want me to map the project structure?")
 2. tenbo creates a `.tenbo/` directory in your repo with architecture docs, roadmaps, and layer definitions
 3. From then on, tenbo listens for planning signals, tracks work, and maintains docs as you code
 
@@ -182,7 +213,7 @@ Updates are user-initiated. Just ask your AI assistant in any session:
 "Update tenbo"
 ```
 
-tenbo checks both surfaces — the skill on GitHub and the `tenbo-dashboard` package on npm — semver-compares them against what you have installed, and updates whichever is behind. If a newer skill requires a newer dashboard than you have, tenbo refuses the skill update first and walks you through upgrading the dashboard, so the two never drift out of sync. Your project data in `.tenbo/` is never touched.
+tenbo detects every install path that exists — the Claude Code skill (`.claude/skills/tenbo/`), the Cursor rule package (`.cursor/rules/tenbo*.mdc`), and the `tenbo-dashboard` npm package — and checks each against its remote. Updates happen in lockstep: if a newer skill or rule requires a newer dashboard than you have, tenbo refuses the editor-package update first and walks you through upgrading the dashboard, so the two never drift out of sync. Your project data in `.tenbo/` is never touched.
 
 Other prompts that work:
 
@@ -196,18 +227,23 @@ Other prompts that work:
 If you'd rather update by hand:
 
 ```bash
-# Skill (always)
 git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo
+
+# Claude Code skill (only if installed)
 cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
+
+# Cursor rule (only if installed)
+cp -r /tmp/tenbo/cursor/. .cursor/rules/
+
 rm -rf /tmp/tenbo
 
-# Dashboard (only if you installed it)
+# Dashboard (only if installed)
 npm install -g tenbo-dashboard@latest
 ```
 
 ## Requirements
 
-- **Skill**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code).
+- **Skill / rule package**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code) or [Cursor](https://cursor.com).
 - **Dashboard**: Node.js 18+.
 
 ## License

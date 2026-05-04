@@ -1,0 +1,149 @@
+---
+description: >
+  Lifecycle of .tenbo/workpads/ files (creation, resume, archive, rework). Load when creating, reconciling, or archiving tenbo workpads.
+alwaysApply: false
+---
+
+# Workpad Protocol
+
+A workpad is a structured living document Tenbo authors per substantial in-flight roadmap item. It serves as the canonical "where are we" record across sessions and subagent dispatches.
+
+Path: `.tenbo/workpads/<item-id>.md`. Item references it via `workpad:` field. Template: `.cursor/rules/tenbo-.cursor/rules/tenbo-templates/workpad.md.tmpl`.
+
+---
+
+## When to create
+
+Create a workpad in the **plan path** when an item is triaged as **substantial** (multi-day, multi-layer, or multiple `done_when` bullets). Lightweight items use `notes:` only.
+
+Triage signals favoring a workpad:
+- Plan path proposes 2+ child items, OR
+- Item has 3+ `done_when` bullets, OR
+- Item touches 2+ layers (`affects:` populated), OR
+- User explicitly says "this will take a while" / "complex" / "phased".
+
+Triage signals against:
+- Single-bullet `done_when` and one layer.
+- Pure rename, doc edit, or one-line fix.
+- Item is `later` and not yet active — defer creation until promoted to `now`.
+
+When in doubt, create one. The cost is one markdown file; the benefit is durable execution state.
+
+---
+
+## Authoring rules
+
+**Tenbo owns initial authoring.** On creation, Tenbo writes:
+- Frontmatter: `item`, `opened` (today), `last_updated` (today), `env` (`<current-branch>@<short-sha>`).
+- Plan: hierarchical checklist seeded from spec, plan-path child items, or the item's description if neither exists.
+- Acceptance Criteria: one checkbox per `done_when:` bullet, verbatim.
+- Validation: empty initially unless the spec or plan path surfaced specific commands.
+- Notes: one timestamped entry — `<date> <time>: Workpad opened.`
+- Confusions: empty.
+
+**User can edit freely.** The workpad is a markdown file, not a structured store. User edits to plan items, ACs, validation, or notes are honored.
+
+**Tenbo updates the workpad** at these moments:
+1. After a subagent reports back — append a Notes entry summarizing what was done; check off Plan and AC items the report verified.
+2. At completion-bar evaluation — verify all AC and Validation boxes are checked; surface any unchecked.
+3. On resume reconciliation (see below).
+
+**Conflict surfacing.** If Tenbo's intended update would overwrite content the user edited (modified-since-last-Tenbo-write), route through the Conflict Surfacing subroutine instead of silent overwrite.
+
+**`last_updated` is Tenbo-owned.** Tenbo updates it on every Tenbo-authored edit. User edits do not change it (filesystem mtime is the indirect signal for those — but Tenbo treats `last_updated` as the canonical "Tenbo last touched" timestamp).
+
+---
+
+## Resume reconciliation
+
+When the user re-engages a `now` item that has a workpad, Tenbo runs reconciliation **before** doing new work:
+
+1. Load the workpad.
+2. Check `env` against current `<branch>@<short-sha>`. If different, note it: "Workpad was last touched on `<old-env>`; you're now on `<new-env>`. Continuing." Update `env`.
+3. Cross-check Plan checkboxes against actual code state. For each checked item, verify the change is present in the working tree or recent commits. For each unchecked item, note it as next-up.
+4. Cross-check AC against current `done_when:` on the roadmap row. If `done_when:` has changed since the workpad's AC was seeded, surface drift via Conflict Surfacing — do not silently rewrite (user may have ticked AC boxes).
+5. If the workpad and code disagree (a checked plan item shows no code evidence, or unchecked items have evidence of completion), surface in one prompt: "Workpad says X done but code shows Y. Update workpad or redo the work?"
+6. Append a Notes entry: `<date> <time>: Resumed. <one-line state summary>.`
+
+Reconciliation is bounded — only the workpad and changed files are read. It's not a full audit.
+
+---
+
+## Continuation-window check
+
+Used by the dispatch path (Improvement 3) to decide first-turn vs. continuation brief.
+
+- If a workpad exists for the item AND `last_updated` is within `continuation_window_hours` (default 24, from `principles.md`), use the **continuation brief** — terse, points to workpad as state.
+- Otherwise, use the **first-turn brief** — full context.
+
+This is a single filesystem check, not session tracking.
+
+---
+
+## Phased items
+
+Phase context lives in plan-item text, not in section structure:
+
+```markdown
+## Plan
+
+- [ ] Phase 1.1: schema migration
+- [ ] Phase 1.2: backfill
+- [ ] Phase 2.1: UI rollout
+```
+
+AC and Validation stay flat across phases. If different phases need genuinely different acceptance criteria, that's a signal to promote each phase to its own item (with `spawned_from: <parent-id>`) and give each its own workpad.
+
+---
+
+## Rework handling
+
+When an item enters `rework`:
+
+1. Bump `dispatch_attempts` on the roadmap item.
+2. Move the existing workpad to `.tenbo/workpads/archive/<item-id>-attempt-<N>.md`.
+3. Create a fresh workpad from the template.
+4. **Auto-prepend a "Lessons from prior attempt(s)" section** before Plan, populated from archived workpads' Confusions sections and any trailing Notes flagged as decisions or blockers. Format:
+
+   ```markdown
+   ## Lessons from prior attempt(s)
+
+   - Attempt 1 (closed <YYYY-MM-DD>): <one-line summary of why approach failed>.
+   - Carry-over: <what to do differently>.
+   ```
+
+5. Reset Plan and AC checkboxes (AC text seeds from current `done_when:`).
+6. Surface to user: "Reset workpad. Lessons from prior attempt are at the top — review before continuing."
+
+---
+
+## Archival
+
+When the item flips to `done` and the completion bar is satisfied:
+
+1. Move the workpad to `.tenbo/workpads/archive/<item-id>.md`.
+2. Clear the `workpad:` field on the roadmap item (or update it to point to the archive path — implementation choice; archive path is preferred for traceability).
+
+Phased items: archive only when ALL phases are complete (matches existing spec lifecycle rule).
+
+---
+
+## Validation rules
+
+Validator warnings (non-blocking unless escalated):
+
+- A `now` substantial item without `workpad:` field → warn ("substantial item missing workpad").
+- A workpad whose `item:` frontmatter doesn't match the filename → error.
+- A workpad whose item has `status: done` but the workpad isn't archived → warn ("orphaned workpad").
+- An item with `dispatch_attempts >= 3` → warn ("chronic rework — consider redesign or scoping change").
+- An item with `bar_override:` set → warn ("completion bar bypassed: <reason>") — surfaces in health checks.
+
+---
+
+## Anti-patterns
+
+- **Don't create workpads for lightweight items.** They add maintenance with no benefit. Use `notes:` instead.
+- **Don't duplicate `done_when:` content.** AC mirrors `done_when:` once at creation; don't keep them in sync by hand. If `done_when:` changes, route through Conflict Surfacing.
+- **Don't write planning docs in the workpad.** Use `.tenbo/specs/<item-id>-<slug>.md` for design rationale and TL;DRs. The workpad is execution state, not specification.
+- **Don't strip the Confusions section even when empty.** It feeds rework's "Lessons" section. Keep the heading; leave the body blank.
+- **Don't silently rewrite user edits.** Conflict Surfacing exists for a reason.

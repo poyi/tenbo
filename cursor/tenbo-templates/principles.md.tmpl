@@ -1,0 +1,31 @@
+# Architecture Principles
+
+## Layering rules
+1. <!-- e.g., "AI Assistant only writes via Tokens layer — never direct DB." -->
+
+## What counts as a violation
+- <!-- Concrete anti-patterns specific to this codebase. -->
+
+## Naming conventions
+- <!-- Term-by-term. -->
+
+## Refactor heuristics
+- <!-- When to split a layer, merge, extract. -->
+
+## Metric thresholds
+
+<!--
+Machine-read by tenbo's metrics tool. Keep as flat key:value YAML — do not add prose, comments, or nested structures inside the fence. Override values to taste.
+
+Defaults are calibrated for healthy layer sizes. If existing layers exceed them, that's a refactor signal (split the layer), NOT a reason to raise the threshold. Only raise a default if your project has a deliberate reason to allow larger layers (e.g., a generated file directory you can't easily split) — in that case, document the reason in a comment ABOVE the YAML fence, not inside it.
+-->
+
+```yaml
+max_files_per_layer: 50
+max_outbound_deps_per_layer: 5
+max_lines_per_layer_total: 8000
+max_days_intent_stale: 30
+max_pct_roadmap_in_now: 20
+continuation_window_hours: 24
+stale_now_days: 7
+```

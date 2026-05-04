@@ -1,0 +1,180 @@
+---
+description: >
+  Worked examples for common tenbo flows. Load when uncertain how a procedure applies to a specific case.
+alwaysApply: false
+---
+
+# Tenbo Worked Examples
+
+End-to-end walkthroughs tenbo can refer back to. Use the same tone and structure when running real interactions.
+
+## Example 1: Bootstrap on a single-app TypeScript repo
+
+**User:** "Set up tenbo for this repo."
+
+**Tenbo:**
+1. Reads `package.json`, `pnpm-workspace.yaml`. None found → single scope.
+2. Scans top-level `src/` for major directories: `domains/canvas`, `domains/ai`, `domains/tokens`, `components/`, `services/`.
+3. Proposes 6 layers in plain language, e.g.:
+   - **Visual Editor** — Where users drag and style components on a canvas.
+   - **AI Assistant** — Where AI helps users edit themes and prototypes.
+   - **Design Tokens** — The color/spacing/typography vocabulary.
+   - **Component Library** — The reusable building blocks rendered on the canvas.
+   - **Persistence** — How designs are saved and synced.
+   - **Export** — How a finished design becomes shareable code/CSS.
+4. Shows the proposal as a numbered list and asks: "These look right? Rename, add, or remove any?"
+5. On confirmation, writes `.tenbo/workspace.yaml`, `.tenbo/scopes/root/architecture.yaml`, six layer narrative skeletons, and `.tenbo/overview.md`.
+6. Asks: "I see `roadmap/NOW.md` and `roadmap/BACKLOG.md`. Want me to import items into `.tenbo/scopes/root/roadmap.yaml`?"
+
+## Example 2: Bootstrap on a pnpm monorepo
+
+**User:** "Set up tenbo."
+
+**Tenbo:**
+1. Reads `pnpm-workspace.yaml` → finds `apps/*` and `packages/*`.
+2. Lists discovered scopes (e.g., `apps/editor`, `packages/ui`, `packages/behaviors`) and asks the user to confirm/edit/exclude.
+3. For each confirmed scope, proposes 5–8 layers and writes per-scope files.
+4. Asks about cross-cutting concerns explicitly: "Are there things that span multiple apps/packages, like shared design tokens or auth?" If yes, populate `cross_cutting` in `workspace.yaml`.
+
+## Example 3: Casual roadmap addition
+
+**User:** "Add a sticky-header feature so the toolbar stays visible when scrolling."
+
+**Tenbo:**
+1. Reads `architecture.yaml` and skims layer narratives.
+2. Scores layers: `visual-editor` (matches "toolbar", "scrolling") far ahead of others.
+3. Confidence is high → classifies without asking.
+4. Generates `id: rm-NNN` (next number), `status: later`, `description: "Make the toolbar stay visible at the top of the screen while the user scrolls."`
+5. Appends to `.tenbo/scopes/root/roadmap.yaml`.
+6. Confirms in plain language: "Added 'Sticky toolbar' to Visual Editor as rm-022, status: later."
+7. Runs validation. Passes.
+
+## Example 4: Ambiguous addition
+
+**User:** "Add support for AI-driven token edits."
+
+**Tenbo:**
+1. Two layers score similarly: `ai-assistant` and `design-tokens`.
+2. Asks: "Should this go under AI Assistant (about how AI helps users) or Design Tokens (about the token vocabulary)?"
+3. User says: "AI Assistant."
+4. Adds with the chosen layer.
+
+## Example 5: Task DoD update
+
+**User:** (After Claude Code finishes implementing rm-001) "Done — implemented and tested."
+
+**Skill (auto-invoked because the task referenced rm-001):**
+1. Marks `rm-001` as `status: done` in `roadmap.yaml`.
+2. Re-reads `layers/ai-assistant.approval.md`. Determines whether the change altered "what this layer does" in plain English. In this case, yes — the layer now actually does what it described.
+3. Updates the narrative's "What it does" section if needed.
+4. Runs validation. Passes.
+5. Confirms: "Marked rm-001 done and updated the Approval Gates narrative."
+
+## Example 6: Drift detection (`refresh tenbo`)
+
+**User:** "Refresh tenbo — I've been making changes."
+
+**Tenbo:**
+1. Reads current `.tenbo/` state.
+2. Walks scope file globs vs current files. Notices: `src/domains/export/` is new, no layer covers it. Several files in `src/domains/ai/` have moved.
+3. Reports:
+   - **New domain detected**: `src/domains/export/` — propose adding an "Export" layer? (Plain English: "How a finished design becomes shareable code/CSS.")
+   - **Layer `ai-assistant` has 12 pending items** — propose splitting into `ai-assistant.tools` / `ai-assistant.approval` / `ai-assistant.execution`?
+4. User accepts proposal 1, declines proposal 2.
+5. Skill writes the new layer's narrative skeleton, updates `architecture.yaml`. Validation passes.
+
+## Example 7: Cross-layer roadmap addition with enrichment
+
+**User:** "Add a feature where the AI Assistant can apply a preset directly to the selected component and update its tokens in one go."
+
+**Tenbo:**
+1. Reads `.tenbo/scopes/editor/architecture.yaml` and skims layer narratives.
+2. Scores layers: `ai-assistant` and `design-tokens` both score well; the work clearly needs both — AI is the entry point, tokens are what changes.
+3. Classifies as **cross-layer**, single scope (editor), two layers. Picks `ai-assistant` as the primary owner because the user-facing trigger is an AI action; `design-tokens` is the cooperating layer.
+4. Drafts the item with AI Assistant as the primary layer, and AI Assistant plus Design Tokens listed as affected, description "Let the AI Assistant apply a preset to the selected component and update its tokens in a single step", status `later`.
+5. Asks: "I can fill in the affected layers, done_when criteria, files_to_read, and risks now or leave them for later. Which do you prefer?"
+
+**User:** "Now."
+
+**Tenbo:**
+6. Confirms the affected layers (already drafted): AI Assistant and Design Tokens.
+7. Drafts `done_when`: "AI can apply a named preset to the selected component, the component re-renders with new tokens, and the change is undoable."
+8. Asks: "Does that done_when line capture it, or should the undo behavior be its own bullet?"
+
+**User:** "Split undo out — and add that the user sees a confirmation toast."
+
+**Tenbo:**
+9. Updates `done_when` to three bullets: preset applies and component re-renders; change is undoable in one step; user sees a confirmation toast naming the preset.
+10. Reads back the revised done_when in plain language and asks for a final yes.
+
+**User:** "Yes."
+
+**Tenbo:**
+11. Drafts `files_to_read`: the AI Assistant's tool surface, the Design Tokens write path, and the toast/notification area.
+12. Drafts `risks`: preset application could clobber user-specific overrides; undo needs to restore the prior token snapshot, not just the prior value.
+13. Appends the row to `.tenbo/scopes/editor/roadmap.yaml`.
+14. Runs validation. Passes.
+15. Confirms: "Added 'AI applies preset to selected component' to AI Assistant as ed-047, also affecting Design Tokens. Status: later. done_when, files_to_read, and risks filled in."
+
+---
+
+## Example: Populated `principles.md` (single-scope visual editor app)
+
+This is a worked example of what a finished `.tenbo/principles.md` looks like for a single-scope project (visual editor for designing a design system, eight layers including Visual Canvas, AI Assistant, Tokens & Themes). It calibrates the expected voice, density, and section-by-section content. Adapt — don't copy verbatim.
+
+```markdown
+# Architecture Principles
+
+This file captures the layering rules, naming conventions, and refactor heuristics that hold across the editor app. It is the canonical reference when deciding where new work belongs and when something has grown big enough to split.
+
+## Layering rules
+
+1. **Design Tokens & Themes is the source of truth for design values.** No other layer hard-codes a color, spacing value, or font size. They read tokens or the published stylesheet instead.
+2. **The AI Assistant only changes the design system through the Tokens & Themes layer.** It never reaches around to write directly to the canvas or to other panels.
+3. **The Visual Canvas owns what is on screen. The Property & Style Editor owns what the selected piece looks like.** Neither one writes into the other. They share state through the layer-tree selection only.
+4. **Publish & Share is downstream of everything.** It reads the finished design system and emits files. It never edits tokens, components, or canvas state on the way out.
+
+(...one rule per major layer responsibility, 6–10 total.)
+
+## What counts as a violation
+
+- A panel or canvas piece reads a color or spacing value from a literal string instead of a token.
+- The AI Assistant writes to the database without going through validation first, or without an approval step on a destructive change.
+- A new building block is created outside the Component Library.
+- A roadmap item lives in the wrong layer because it was the easiest place to drop it, not because it actually belongs there.
+
+(Each bullet is enforceable at review time. If you can't tell whether a PR violates it, the rule is too vague.)
+
+## Naming conventions
+
+- **Layer names use product language, not technical language.** "Visual Canvas", not "renderer".
+- **Layer ids are kebab-case** and match the folder name under `.tenbo/scopes/<scope>/layers/`.
+- **Roadmap item ids use the scope prefix** (e.g., `ed-` for editor scope) followed by a three-digit number; cross-scope items use `x-`.
+- **Component types use PascalCase singular** (`Button`, `Input`); variant dimensions are short lowercase nouns (`size`, `color`).
+
+## Refactor heuristics
+
+- **Split a layer when it has more than ten roadmap items in flight or its plain-language narrative grows past 300 lines.**
+- **Split a layer when its file count crosses the metric thresholds below.**
+- **Promote a sub-concern into its own layer when it grows its own external dependencies, its own approval flow, or its own settings panel.**
+- **Pull a deep-dive document out of a layer when its README starts answering "how" questions instead of "what" questions.**
+
+## Metric thresholds
+
+<!-- Machine-read by tenbo's metrics tool. Keep as flat key:value YAML. -->
+
+```yaml
+max_files_per_layer: 50
+max_outbound_deps_per_layer: 5
+max_lines_per_layer_total: 8000
+max_days_intent_stale: 30
+max_pct_roadmap_in_now: 20
+```
+```
+
+**Calibration notes:**
+
+- ~600–800 words is plenty. Longer = nobody reads it.
+- The "What counts as a violation" section has no template hint — agents commonly skip or under-write it. The example is your nudge to make it concrete and enforceable.
+- Keep thresholds at template defaults unless you have a specific reason to change them. Existing layers exceeding defaults are a refactor signal, not a reason to raise the threshold.
+- Plain-English discipline applies — no "module", "API", "endpoint" in the prose. Inside the YAML threshold block, technical names (`max_files_per_layer`) are fine because that block is machine-read.

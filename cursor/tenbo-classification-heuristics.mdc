@@ -1,0 +1,87 @@
+---
+description: >
+  Heuristics for classifying a new roadmap item to a layer or scope. Load when capturing or planning roadmap items, especially when intent spans multiple layers.
+alwaysApply: false
+---
+
+# Tenbo Classification Heuristics
+
+When the user adds a roadmap item without specifying a layer, tenbo must classify it. These heuristics guide that decision.
+
+## Inputs available
+
+- The user's phrasing of the item.
+- `architecture.yaml` for each scope (layer ids, names, description, file globs).
+- Layer narrative `.md` files (more context per layer).
+- Optionally: any files the user mentions explicitly.
+
+## Procedure
+
+1. **Parse the user's phrasing** for nouns and domain terms. Examples: "sticky header" → UI element; "approval prompt" → guardrail; "Figma export" → integration.
+2. **Match against layer `description` and `name`**. Score each layer by relevance.
+3. **Cross-check against `files` globs** if the user mentioned a file path or feature area.
+4. **If one layer scores clearly highest, classify there.** Confidence threshold: at least 2× the runner-up's score, or the runner-up is unrelated.
+5. **If two or three layers score similarly, ask the user.** Present the top candidates with a one-line description each. Do not pick silently.
+6. **If no layer scores well, propose creating a new layer.** This is a schema change — present rationale and ask before adding.
+
+## Cross-cutting classification
+
+Every item lands in one of three buckets. Decide before writing the row.
+
+### Single-layer (default)
+
+One layer scores clearly highest and the work is naturally that layer's responsibility. Use plain `layer: <id>`. No `affects:`. This is the common case — most additions belong here.
+
+### Cross-layer (one scope, exactly 2 layers)
+
+The work touches **exactly two** layers within the same scope. Pick the layer that owns the primary outcome as `layer:`, and list both touched layers (including the primary) in `affects: [...]`. The item still lives in that scope's `roadmap.yaml`.
+
+Trigger: the user names two distinct layer concerns in one breath, or the obvious top-scoring layer can't deliver the outcome without a second layer's cooperation.
+
+Disambiguation: if the work touches 3+ layers — even all within the same scope — it promotes to **cross-scope** (next bucket). The cross-layer bucket is reserved for the 2-layer case.
+
+### Cross-scope (workspace-level)
+
+Promote to a workspace-level item when any of these hold:
+
+- The item touches **3 or more layers** (regardless of whether they're in one scope or many), or
+- The item touches **2 or more scopes**, or
+- The user describes the outcome in product terms — a user journey, a metric, a release theme — rather than naming any layer. (Examples: "overhaul onboarding flow", "reduce time-to-interactive by 30%", "Q3 design-system marketing push".) When the user names layers explicitly, prefer cross-layer or single-layer instead.
+
+Cross-scope items live in `.tenbo/roadmap.yaml` (workspace scope), use the `x-NNN` id prefix, and use the `scope-id:layer-id` form inside `affects:`. Limit them to true span-of-work; if it's really separate work in each scope that happens to share a name, file separate items per scope.
+
+## The `affects:` field
+
+`affects:` is a list of every touched layer's id. The rules:
+
+- **Omit `affects:` entirely for single-layer items.** `layer:` alone is the signal.
+- **Same-scope cross-layer items** use bare layer ids: `affects: [visual-editor, property-editor]`.
+- **Workspace cross-scope items** use qualified ids: `affects: [editor:visual-editor, ui:component-library]`.
+- **`layer:` is the primary owner**; `affects:` is the full touched-layers list. Always **include the primary** in `affects:` so the list is self-contained — readers should be able to see every touched layer without cross-referencing `layer:`.
+- **Trigger:** when the user mentions multiple layers explicitly, or the work clearly can't land in one layer alone, populate `affects:`. When only one layer is implied, leave `affects:` off.
+
+## Default values when classifying
+
+- `id`: `<prefix>-NNN`, where `<prefix>` is the target scope's `prefix` from `workspace.yaml` (e.g., `ed-NNN` for editor, `ui-NNN` for ui). Cross-scope items use `x-NNN`. NNN is the next available number within that scope's roadmap.
+- `status`: `later` unless the user says otherwise (now / next / later).
+- `description`: rewrite the user's phrasing into one non-engineer-readable sentence. Confirm with the user if you changed meaning.
+
+## Anti-patterns
+
+- **Don't dump items into a generic catch-all layer.** If you can't classify, ask.
+- **Don't auto-create new layers without confirmation.** Schema changes are a different conversation.
+- **Don't echo back YAML** to the user when confirming. Use plain language: "Added 'export to Figma' to the AI Assistant layer as item rm-022."
+
+## Importing existing roadmaps (bootstrap-time)
+
+When importing items from a pre-existing `roadmap/` directory, `ROADMAP.md`, `BACKLOG.md`, or similar:
+
+- **Consolidate umbrella patterns.** If 5+ source items share an obvious umbrella (e.g., "add Popover module", "add Sheet module", "add Accordion module" × 8), merge them into a single umbrella roadmap item with the full list embedded inside its `description` field. This keeps the roadmap readable instead of producing 20+ near-duplicate rows.
+- **Tier-based grouping is a strong signal.** If the source roadmap groups items into priority tiers (Tier 1/2/3, P0/P1, Now/Next/Later), one umbrella per tier is usually right.
+- **Preserve recent ✅ items as `done`.** Pull in the last few completed milestones from `ARCHIVE.md` or equivalent so the layer narrative has a sense of momentum and recent context. Cap at ~5–8 done items per scope; older history doesn't need to be in `roadmap.yaml`.
+- **Map source statuses sensibly.**
+  - "in progress" / "active" → `now`
+  - "next sprint" / "P0" / "this quarter" → `next`
+  - "backlog" / "P1+" / "someday" → `later`
+  - "shipped" / "done" / "✅" → `done`
+- **One in-flight item per layer is healthy.** If the source has many `now` items in one layer, ask the user which is actually in flight; demote the rest to `next`.
