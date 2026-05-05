@@ -34,30 +34,53 @@ tenbo is a Claude Code skill that runs alongside your normal coding workflow. It
 
 ## Install
 
-Two install paths depending on your editor. Both use the same `.tenbo/` data on disk and the same companion dashboard, so a project set up in one editor is portable to the other.
-
-### Install for Claude Code
+One line — detects which editor(s) you have installed (Claude Code, Cursor) and installs tenbo for each, plus the optional `tenbo-dashboard` companion. Safe to re-run as an updater.
 
 ```bash
-# From your project directory
+curl -fsSL https://raw.githubusercontent.com/poyi/tenbo/main/install.sh | bash
+```
+
+Same `.tenbo/` data on disk works for both editors — a project set up in one is portable to the other.
+
+> **What does it do?** Run `--dry-run` first if you want to see exactly what changes:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/poyi/tenbo/main/install.sh | bash -s -- --dry-run
+> ```
+>
+> Other useful flags:
+> - `--list` — show the editor matrix and exit
+> - `--only cursor` (or `--only claude`) — install for one editor only
+> - `--minimal` — skip the npm dashboard install
+> - `--help` — full reference
+>
+> For reproducible installs, pin a tag instead of `main`:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/poyi/tenbo/v0.4.0/install.sh | bash
+> ```
+
+That's it. Open your editor in a project and ask: **"set up tenbo"**.
+
+### Manual install (if you'd rather not curl-pipe a script)
+
+The installer just runs `git clone` + `cp -r` under the hood. If you'd rather do it by hand:
+
+```bash
+# Clone once
 git clone https://github.com/poyi/tenbo.git /tmp/tenbo
-cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
+
+# Claude Code skill (only if you use Claude Code)
+mkdir -p .claude/skills && cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
+
+# Cursor rule (only if you use Cursor)
+mkdir -p .cursor/rules && cp -r /tmp/tenbo/cursor/. .cursor/rules/
+
+# Optional dashboard
+npm install -g tenbo-dashboard@latest
+
 rm -rf /tmp/tenbo
 ```
 
-That's it. Start a Claude Code session and tenbo will offer to map your project.
-
-### Install for Cursor
-
-```bash
-# From your project directory
-git clone https://github.com/poyi/tenbo.git /tmp/tenbo
-mkdir -p .cursor/rules
-cp -r /tmp/tenbo/cursor/. .cursor/rules/
-rm -rf /tmp/tenbo
-```
-
-That's it. Open Cursor, mention what you're building, and tenbo's rule activates automatically (it's an Agent Requested rule — Cursor's agent loads it based on intent).
+Open your editor and ask: **"set up tenbo"**.
 
 > **Allowlist tip for Cursor:** to avoid permission prompts when tenbo runs CLI commands, add `npx tenbo-dashboard *` to Cursor's auto-run allowlist (Settings → Features → Agent → Auto-run).
 
