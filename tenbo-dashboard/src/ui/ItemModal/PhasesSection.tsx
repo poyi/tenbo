@@ -1,7 +1,7 @@
 import type { Item, Phase, Status } from '../../types';
 import { phaseProgress } from '../../api/lib/phases';
 
-const STATUSES: Status[] = ['now', 'next', 'later', 'done'];
+const STATUSES: Status[] = ['now', 'next', 'later', 'done', 'dropped'];
 
 interface Props {
   item: Item;

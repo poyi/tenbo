@@ -8,7 +8,7 @@ const FORBIDDEN_JARGON = [
   'worker', 'daemon',
 ];
 
-const VALID_STATUSES = new Set(['now', 'next', 'later', 'done']);
+const VALID_STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
 const VALID_PRIORITIES = new Set(['p0', 'p1', 'p2', 'p3']);
 const ITEM_ID_RE = /^[a-z]{1,5}-\d{3,}$/;
 const DOC_UPDATE_REQUIRED_TYPES = new Set(['feature', 'refactor', 'bug']);

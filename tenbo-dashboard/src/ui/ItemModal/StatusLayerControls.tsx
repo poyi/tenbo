@@ -1,7 +1,7 @@
 import type { Layer, Priority, Status } from '../../types';
 import styles from './ItemModal.module.css';
 
-const STATUSES: Status[] = ['now', 'next', 'later', 'done'];
+const STATUSES: Status[] = ['now', 'next', 'later', 'done', 'dropped'];
 const PRIORITIES: Priority[] = ['p0', 'p1', 'p2', 'p3'];
 
 interface Props {

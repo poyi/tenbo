@@ -1,6 +1,7 @@
 import { CornerLeftUp, ArrowLeftRight } from 'lucide-react';
 import type { Item, Status } from '../types';
 import { effectiveStatus } from '../api/lib/phases';
+import { comparePriority } from '../api/lib/priority';
 import styles from './TaskList.module.css';
 
 export interface FlatItem {
@@ -15,11 +16,18 @@ interface Props {
 }
 
 const STATUS_ORDER: Status[] = ['now', 'next', 'later', 'done'];
-const STATUS_LABEL: Record<Status, string> = { now: 'Now', next: 'Next', later: 'Later', done: 'Done' };
+const STATUS_LABEL: Record<Status, string> = { now: 'Now', next: 'Next', later: 'Later', done: 'Done', dropped: 'Dropped' };
 
-export function TaskList({ items, onRowClick }: Props) {
+export function TaskList({ items: rawItems, onRowClick }: Props) {
+  // Hide `dropped` items from the list view (matches LayerKanban behavior).
+  const items = rawItems.filter(({ item }) => effectiveStatus(item) !== 'dropped');
+  // Group by status (now → next → later → done) and within each status
+  // group by priority (p0 → p3 → unset). Both sorts are stable so file
+  // order acts as the tiebreaker for items at the same priority. (td-009)
   const sorted = STATUS_ORDER.flatMap(s =>
-    items.filter(({ item }) => effectiveStatus(item) === s)
+    items
+      .filter(({ item }) => effectiveStatus(item) === s)
+      .sort((a, b) => comparePriority(a.item, b.item))
   );
 
   if (items.length === 0) {

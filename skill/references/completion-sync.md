@@ -38,14 +38,25 @@ summary. Judgment calls use the universal prompting rule.
 8. **Mark done.** Set `status: done`. Archive spec if `links:` points into `.tenbo/specs/`.
    Archive workpad to `.tenbo/workpads/archive/<item-id>.md` if present.
    Phased: mark only the matching phase; archive spec/workpad when all phases done.
-9. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
-   plain `sync` if changes spanned multiple scopes). This recomputes metrics,
-   re-runs init-check, re-validates, AND surfaces any NEW critical/warning findings
-   inline — in one command. Without this, the dashboard's Health page (and the
-   next session's briefing) will show stale data. Cheap — do not skip.
-10. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
+9. **Dependent sweep.** Scan all `roadmap.yaml` files (this scope + cross-scope
+   `.tenbo/roadmap.yaml`) for items that may now be redundant given this one
+   shipped. A candidate is any item where ALL of the following are true:
+   - Status is `later` or `next` (already-done or in-progress aren't worth flagging).
+   - One of these references the just-closed item id: `spawned_from:` exact match,
+     `related:` exact match, or the closed id appears as an exact-match token
+     (e.g. `sk-013` not `sk`) in the title, description, or any phase title.
+   Cap the surface at **3 candidates** (highest scoring first: title-mention >
+   spawned_from > related). Format: *"Closing [id] — looks like [N] item(s)
+   reference this. Mark each (a) done, (b) dropped, or (c) leave as-is?"*
+   On user response, apply per-item. Skip silently if no candidates surface.
+10. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
+    plain `sync` if changes spanned multiple scopes). This recomputes metrics,
+    re-runs init-check, re-validates, AND surfaces any NEW critical/warning findings
+    inline — in one command. Without this, the dashboard's Health page (and the
+    next session's briefing) will show stale data. Cheap — do not skip.
+11. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
     through verbatim as a one-liner to the user. At most once per session.
-11. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
+12. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
 
 ## Rework path
 

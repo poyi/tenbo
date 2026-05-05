@@ -29,6 +29,20 @@ describe('derivePhaseStatus', () => {
   it('returns later for an empty list', () => {
     expect(derivePhaseStatus([])).toBe('later');
   });
+
+  it('returns dropped when every phase is dropped', () => {
+    expect(derivePhaseStatus([ph(1, 'dropped'), ph(2, 'dropped')])).toBe('dropped');
+  });
+
+  it('returns done when phases mix done and dropped (work shipped, rest abandoned)', () => {
+    expect(derivePhaseStatus([ph(1, 'done'), ph(2, 'dropped')])).toBe('done');
+    expect(derivePhaseStatus([ph(1, 'done'), ph(2, 'done'), ph(3, 'dropped')])).toBe('done');
+  });
+
+  it('still treats a now/next phase as active even if other phases are dropped', () => {
+    expect(derivePhaseStatus([ph(1, 'done'), ph(2, 'now'), ph(3, 'dropped')])).toBe('now');
+    expect(derivePhaseStatus([ph(1, 'done'), ph(2, 'next'), ph(3, 'dropped')])).toBe('next');
+  });
 });
 
 describe('effectiveStatus', () => {

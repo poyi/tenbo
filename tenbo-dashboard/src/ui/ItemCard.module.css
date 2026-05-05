@@ -5,9 +5,21 @@
   margin-bottom: 4px;
   cursor: grab;
   position: relative;
-  transition: background var(--dur-state) var(--ease);
+  transition: background var(--dur-state) var(--ease), opacity var(--dur-state) var(--ease);
 }
 .card:hover { background: var(--console-mist); }
+
+/*
+ * Done cards fade to 60% so live columns (now/next/later) dominate the
+ * visual hierarchy. Hover lifts to full opacity as a subtle affordance
+ * that the card is still interactive. (td-008)
+ */
+.cardDone {
+  opacity: 0.6;
+}
+.cardDone:hover {
+  opacity: 1;
+}
 .card:focus-visible {
   outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;

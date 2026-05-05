@@ -18,7 +18,11 @@ interface Props {
 
 const STATUSES: Status[] = ['now', 'next', 'later', 'done'];
 
-export function LayerKanban({ layer, items, depth = 0, alwaysOpen = false, onCardClick, onTitleEdit, onDescEdit }: Props) {
+export function LayerKanban({ layer, items: rawItems, depth = 0, alwaysOpen = false, onCardClick, onTitleEdit, onDescEdit }: Props) {
+  // `dropped` items are hidden from the kanban by default — they're still
+  // editable via the item modal, still counted by validators, but they don't
+  // clutter the visual board. (Future: a "show dropped" toggle.)
+  const items = rawItems.filter(i => effectiveStatus(i) !== 'dropped');
   const counts = STATUSES.map(s => items.filter(i => effectiveStatus(i) === s).length);
   const hasActive = counts[0] > 0 || counts[1] > 0;
   const [open, setOpen] = useState(hasActive);

@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CornerLeftUp, ArrowLeftRight } from 'lucide-react';
 import type { Item } from '../types';
-import { phaseProgress } from '../api/lib/phases';
+import { effectiveStatus, phaseProgress } from '../api/lib/phases';
 import styles from './ItemCard.module.css';
 
 interface Props {
@@ -24,10 +24,15 @@ export function ItemCard({ item, onClick, onTitleEdit, onDescEdit }: Props) {
   const phases = item.phases ?? [];
   const progress = phases.length > 0 ? phaseProgress(phases) : null;
 
+  // Done cards are dimmed in the kanban so the live columns (now/next/later)
+  // own the user's visual attention. Hover restores opacity. The item modal
+  // (rendered separately) is not affected — only the kanban card. (td-008)
+  const isDone = effectiveStatus(item) === 'done';
+
   return (
     <div
       ref={setNodeRef}
-      className={styles.card}
+      className={`${styles.card}${isDone ? ` ${styles.cardDone}` : ''}`}
       style={dragStyle}
       {...attributes}
       {...listeners}

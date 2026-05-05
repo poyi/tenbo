@@ -6,7 +6,7 @@ import type { Finding } from './api/lib/health/types';
 // - camelCase fields are in-memory composed state assembled by the viewer (e.g., `crossCuttingRoadmap`,
 //   `layerDocs`). Renaming these is purely an internal refactor.
 
-export type Status = 'now' | 'next' | 'later' | 'done';
+export type Status = 'now' | 'next' | 'later' | 'done' | 'dropped';
 
 /**
  * Advisory priority marker. Does NOT affect roadmap ordering — items still execute
