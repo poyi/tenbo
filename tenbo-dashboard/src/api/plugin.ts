@@ -23,7 +23,9 @@ export function tenboApiPlugin(): Plugin {
       server.middlewares.use(reorderRoute(repoRoot));
       server.middlewares.use(relatedRoute(repoRoot));
       server.middlewares.use(openRoute(repoRoot));
-      server.middlewares.use(watchRoute(repoRoot));
+      const watch = watchRoute(repoRoot);
+      server.middlewares.use(watch.handler);
+      server.httpServer?.on('close', () => { void watch.close(); });
       server.middlewares.use(layerDocsRoute(repoRoot));
       server.middlewares.use(layerContentRoute(repoRoot));
     },

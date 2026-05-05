@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, renameSync, statS
 import path from 'node:path';
 import { parse as parseSimple } from 'yaml';
 import { parseYaml, stringifyYaml, patchSeqItem, reorderSeqItems } from './yamlOrdered';
+import { getCached, invalidate as invalidateCache } from './parseCache';
 import type { TenboState, Scope, Item, Layer, CrossCutting, LayerDocs, ScopeMetrics, WorkspaceContent, LayerContent } from '../../types';
 
 function tenboDir(repoRoot: string) { return path.join(repoRoot, '.tenbo'); }
@@ -47,8 +48,10 @@ export function tenboExists(repoRoot: string): boolean {
 }
 
 export function readWorkspace(repoRoot: string): { scopeRefs: { id: string; path: string; description: string }[]; crossCutting: CrossCutting[] } {
-  const text = readFileSync(path.join(tenboDir(repoRoot), 'workspace.yaml'), 'utf8');
-  const data = parseSimple(text) as any;
+  // Cached parse — re-reads only when workspace.yaml content changes.
+  // See parseCache.ts for the content-hash + transient-failure semantics.
+  const file = path.join(tenboDir(repoRoot), 'workspace.yaml');
+  const data = getCached(file, 'workspace-yaml', (text) => parseSimple(text) as any);
   return {
     scopeRefs: data?.scopes ?? [],
     crossCutting: data?.cross_cutting ?? [],
@@ -56,14 +59,14 @@ export function readWorkspace(repoRoot: string): { scopeRefs: { id: string; path
 }
 
 function readArchitecture(repoRoot: string, scopeId: string): Layer[] {
-  const text = readFileSync(path.join(tenboDir(repoRoot), 'scopes', scopeId, 'architecture.yaml'), 'utf8');
-  const data = parseSimple(text) as any;
+  const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'architecture.yaml');
+  const data = getCached(file, 'architecture-yaml', (text) => parseSimple(text) as any);
   return data?.layers ?? [];
 }
 
 function readRoadmap(repoRoot: string, scopeId: string): Item[] {
-  const text = readFileSync(path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml'), 'utf8');
-  const data = parseSimple(text) as any;
+  const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
+  const data = getCached(file, 'roadmap-yaml', (text) => parseSimple(text) as any);
   return data?.items ?? [];
 }
 
@@ -218,6 +221,10 @@ function atomicWrite(filePath: string, content: string): void {
   const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   writeFileSync(tmp, content, 'utf8');
   renameSync(tmp, filePath);
+  // Drop any cached parse for this path. The next read will re-parse from
+  // disk; the file watcher's invalidate will cover external edits, this
+  // covers our own writes (no race with the SSE event arriving "later").
+  invalidateCache(filePath);
 }
 
 export function patchItem(repoRoot: string, scopeId: string, itemId: string, patch: Partial<Item>): void {

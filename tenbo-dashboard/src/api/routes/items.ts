@@ -1,8 +1,10 @@
 import type { Connect } from 'vite';
-import { patchItem } from '../lib/tenboFs';
+import path from 'node:path';
+import { patchItem, readState } from '../lib/tenboFs';
+import { recordRecentWrite } from '../lib/recentWrites';
 import { readBody, json, error, withErrorHandling } from '../lib/http';
 
-const ALLOWED = new Set(['title', 'description', 'status', 'layer', 'notes', 'links', 'priority', 'done_when', 'files_to_read', 'risks']);
+const ALLOWED = new Set(['title', 'description', 'status', 'layer', 'notes', 'links', 'priority', 'done_when', 'files_to_read', 'risks', 'phases']);
 
 export function itemsRoute(repoRoot: string): Connect.NextHandleFunction {
   return withErrorHandling(async (req, res, next) => {
@@ -19,7 +21,26 @@ export function itemsRoute(repoRoot: string): Connect.NextHandleFunction {
     for (const k of Object.keys(patch)) {
       if (ALLOWED.has(k)) filtered[k] = patch[k];
     }
+
+    // Record the originating client token so the SSE channel can suppress
+    // the echo back to that client (td-005 step 3 — echo suppression).
+    // Clients send X-Tenbo-Origin as a per-instance UUID generated at boot.
+    const origin = (req.headers['x-tenbo-origin'] as string | undefined) ?? null;
+    const filePath = path.join(repoRoot, '.tenbo', 'scopes', scopeId, 'roadmap.yaml');
+    recordRecentWrite(filePath, origin);
+
     patchItem(repoRoot, scopeId, itemId, filtered);
-    json(res, { ok: true });
+
+    // Re-read state and return the canonical post-write item so the client
+    // can merge into its local state immediately (td-005 step 1+2 —
+    // optimistic UI without waiting for SSE). Falls through to a 404 if
+    // the item somehow disappeared during the write (concurrent delete).
+    const state = readState(repoRoot);
+    const scope = state.scopes.find((s) => s.id === scopeId);
+    const item = scope?.items.find((i) => i.id === itemId);
+    if (!item) {
+      return error(res, 404, `item ${itemId} not found in scope ${scopeId} after patch`);
+    }
+    json(res, { ok: true, item });
   });
 }

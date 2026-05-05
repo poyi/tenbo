@@ -25,7 +25,7 @@ type Overlay =
   | null;
 
 export default function App() {
-  const { state, loadError, reload, generation } = useTenboState();
+  const { state, loadError, reload, mergeItem, generation } = useTenboState();
   const patch = useApiPatch();
   const { route, navigate } = useHashRoute();
 
@@ -60,8 +60,12 @@ export default function App() {
     else navigate({ kind: 'docs-project', tab: 'overview' });
   };
 
+  // After PATCH the server returns the canonical item; merge into local
+  // state immediately rather than waiting for the SSE-triggered full reload
+  // (the SSE echo is filtered by origin token in useTenboState). td-005.
   const handlePatch = async (scopeId: string, itemId: string, p: Partial<Item>) => {
-    await patch(scopeId, itemId, p);
+    const updated = await patch(scopeId, itemId, p);
+    mergeItem(scopeId, updated);
   };
 
   const body = (() => {
@@ -124,12 +128,20 @@ export default function App() {
           relatedDocs={related}
           state={state}
           onClose={() => setOverlay(null)}
-          onPatch={async (p) => { await patch(overlay.scopeId, overlay.item.id, p); }}
+          onPatch={async (p) => {
+            const updated = await patch(overlay.scopeId, overlay.item.id, p);
+            mergeItem(overlay.scopeId, updated);
+            // Refresh the overlay's snapshot of the item so subsequent edits
+            // (and the "keep overlay in sync" effect above) see the latest.
+            setOverlay({ kind: 'modal', scopeId: overlay.scopeId, item: updated });
+          }}
           onOpenFile={(path) => { tenboApi.openFile(path).catch(() => {}); }}
           onPromoteRelated={async (path) => {
             const cur = overlay.item.links ?? [];
             if (!cur.includes(path)) {
-              await patch(overlay.scopeId, overlay.item.id, { links: [...cur, path] });
+              const updated = await patch(overlay.scopeId, overlay.item.id, { links: [...cur, path] });
+              mergeItem(overlay.scopeId, updated);
+              setOverlay({ kind: 'modal', scopeId: overlay.scopeId, item: updated });
             }
           }}
           onSelectItem={(sId, it) => {

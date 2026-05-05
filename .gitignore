@@ -22,3 +22,4 @@ Thumbs.db
 # tenbo local project management (dogfooding)
 .tenbo/
 .claude/
+.vite/
