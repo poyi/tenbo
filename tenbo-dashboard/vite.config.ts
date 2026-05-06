@@ -24,6 +24,12 @@ export default defineConfig({
       'remark-gfm',
       'style-to-js',
       'hast-util-to-jsx-runtime',
+      // lucide-react ships ~1500 individual icon files in dist/esm/icons/.
+      // Without pre-bundling, the dev server serves each icon as a separate
+      // ESM module the browser fetches one-by-one — first launch sits on
+      // 'Loading...' for 10+ seconds. Forcing pre-bundle collapses them
+      // into a single chunk served from .vite/deps. (td-010)
+      'lucide-react',
     ],
   },
   test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },

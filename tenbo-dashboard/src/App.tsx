@@ -24,6 +24,30 @@ type Overlay =
   | { kind: 'modal'; scopeId: string; item: Item }
   | null;
 
+/**
+ * Loading state shown until the initial GET /api/state lands. Adds a "still
+ * loading after 5s" hint so a slow first launch (e.g. cold Vite optimizeDeps)
+ * doesn't look like a broken state. (td-013)
+ */
+function LoadingState() {
+  const [showSlowHint, setShowSlowHint] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setShowSlowHint(true), 5000);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div style={{ padding: 24, fontFamily: 'system-ui', color: 'var(--console-fog)' }}>
+      <div style={{ marginBottom: 8 }}>Loading workspace from <code>.tenbo/</code>…</div>
+      {showSlowHint && (
+        <div style={{ fontSize: 12, opacity: 0.7, maxWidth: 520 }}>
+          First launch can take ~10 seconds while Vite optimizes the dependency graph.
+          If this persists past ~30 seconds, check the terminal for errors.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const { state, loadError, reload, mergeItem, generation } = useTenboState();
   const patch = useApiPatch();
@@ -50,7 +74,7 @@ export default function App() {
 
   if (loadError && loadError.includes('404')) return <EmptyState message="No .tenbo/ found at the repo root." />;
   if (loadError) return <div style={{ padding: 24, color: 'var(--error)' }}>Error: {loadError} <button onClick={reload}>retry</button></div>;
-  if (!state) return <div style={{ padding: 24 }}>Loading…</div>;
+  if (!state) return <LoadingState />;
 
   const mode = modeFromRoute(route);
   const onSelectMode = (m: Mode) => {

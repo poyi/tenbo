@@ -41,6 +41,13 @@ const commands = {
   sync: 'scripts/sync.ts',
 };
 
+// Documented aliases for the bare-launch behavior. Users (and agents) reading
+// help shouldn't have to discover that running `tenbo-dashboard` with no args
+// launches the dashboard — these subcommand verbs are conventional and now
+// explicit. Anything not in `commands` and not in this set is treated as an
+// error rather than silently launching. (td-012)
+const LAUNCH_ALIASES = new Set(['serve', 'start', 'dev']);
+
 function run(script, scriptArgs) {
   const tsx = findTsx();
   const child = spawn(tsx, [path.join(root, script), ...scriptArgs], {
@@ -66,6 +73,7 @@ tenbo-dashboard — local architecture dashboard for .tenbo/ repos
 
 Usage:
   tenbo-dashboard                  Launch the dashboard (http://localhost:5174)
+  tenbo-dashboard serve            Same as bare invocation (also: 'start', 'dev')
   tenbo-dashboard sync             Refresh tenbo state after a change (metrics + init-check + validate, surfaces new findings)
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
@@ -73,14 +81,22 @@ Usage:
   tenbo-dashboard metrics --all    Compute scope metrics
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
+
+The dashboard reads/writes .tenbo/ in the current working directory. To
+serve a different repo, cd into it before running.
 `);
   process.exit(0);
 }
 
 if (commands[command]) {
   run(commands[command], args);
-} else {
-  // No recognized subcommand — default to launching the dashboard
-  // Pass the original command back as an arg in case it was a flag
+} else if (!command || LAUNCH_ALIASES.has(command)) {
+  // Bare invocation OR a documented launch alias ('serve' / 'start' / 'dev').
   startDashboard();
+} else {
+  // Unknown subcommand — surface clearly instead of silently launching.
+  // (Pre-td-012 behavior was to fall through; that hid typos.)
+  process.stderr.write(`tenbo-dashboard: unknown subcommand '${command}'\n`);
+  process.stderr.write(`Run 'tenbo-dashboard help' for usage.\n`);
+  process.exit(2);
 }
