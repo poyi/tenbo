@@ -22,11 +22,37 @@ export function validate(state: TenboState): ValidateResult {
   // Collect every known roadmap-item id across scopes + cross-cutting roadmap.
   // Used by the relationship validator (`spawned_from`, `related`) to flag
   // references that don't resolve to anything in the workspace.
+  // Also includes archived items so references to them don't produce warnings.
   const allItemIds = new Set<string>();
   for (const scope of state.scopes) {
     for (const item of scope.items) allItemIds.add(item.id);
+    for (const item of scope.archivedItems ?? []) allItemIds.add(item.id);
   }
   for (const item of state.crossCuttingRoadmap ?? []) allItemIds.add(item.id);
+
+  const validateSupersededBy = (item: Item, scopeId?: string) => {
+    if (item.superseded_by === undefined) return;
+    const sb = item.superseded_by;
+    if (typeof sb !== 'string' || !ITEM_ID_RE.test(sb)) {
+      errors.push({ level: 'error', message: `item "${item.id}" superseded_by "${sb}" has invalid id format`, scope: scopeId, itemId: item.id });
+      return;
+    }
+    if (sb === item.id) {
+      errors.push({ level: 'error', message: `item "${item.id}" superseded_by cannot reference itself`, scope: scopeId, itemId: item.id });
+      return;
+    }
+    if (!allItemIds.has(sb)) {
+      warnings.push({ level: 'warning', message: `${item.id} superseded_by references unknown id '${sb}'`, scope: scopeId, itemId: item.id });
+    }
+    if (item.status !== 'dropped') {
+      warnings.push({ level: 'warning', message: `${item.id} has superseded_by but status is "${item.status}" (expected "dropped")`, scope: scopeId, itemId: item.id });
+    }
+    // Cycle check: if the superseder also has superseded_by pointing back
+    const superseder = [...state.scopes.flatMap(s => s.items), ...(state.crossCuttingRoadmap ?? [])].find(i => i.id === sb);
+    if (superseder?.superseded_by === item.id) {
+      errors.push({ level: 'error', message: `cycle: "${item.id}" superseded_by "${sb}" which is superseded_by "${item.id}"`, scope: scopeId, itemId: item.id });
+    }
+  };
 
   const validateRelationships = (item: Item, scopeId?: string) => {
     if (item.spawned_from !== undefined) {
@@ -213,6 +239,9 @@ export function validate(state: TenboState): ValidateResult {
       // Relationship validation (Phase 5 of x-001).
       validateRelationships(item, scope.id);
 
+      // Superseded-by validation (sk-015).
+      validateSupersededBy(item, scope.id);
+
       // Spec-link lifecycle validation (Phase 6 of x-001).
       validateSpecLinks(item, scope.id);
 
@@ -304,6 +333,7 @@ export function validate(state: TenboState): ValidateResult {
       }
     }
     validateRelationships(item);
+    validateSupersededBy(item);
     validateSpecLinks(item);
   }
 

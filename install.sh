@@ -284,6 +284,17 @@ install_dashboard() {
   run npm install -g "$DASHBOARD_PKG@latest"
   record_installed "tenbo-dashboard"
   ok "  ✔ tenbo-dashboard installed (run: npx tenbo-dashboard)"
+
+  # Check for stale npx cache: the version npx resolves may differ from what
+  # npm just installed globally (npx has its own cache in ~/.npm/_npx/).
+  if [ "$DRY" = 0 ] && has npx; then
+    cached_ver=$(npx --no-install "$DASHBOARD_PKG" --version 2>/dev/null || true)
+    latest_ver=$(npm view "$DASHBOARD_PKG" version 2>/dev/null || true)
+    if [ -n "$cached_ver" ] && [ -n "$latest_ver" ] && [ "$cached_ver" != "$latest_ver" ]; then
+      warn "  ⚠ npx cache is stale: npx resolves v$cached_ver but latest is v$latest_ver"
+      warn "    Fix: run 'npx clear-npx-cache' or use 'npx $DASHBOARD_PKG@latest'"
+    fi
+  fi
 }
 
 # ── Main ───────────────────────────────────────────────────────────────────

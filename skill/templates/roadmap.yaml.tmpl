@@ -83,3 +83,20 @@ items: []
 #     description: "<one sentence>"
 #     spawned_from: ed-049
 #     related: [ed-046, ed-057]
+#
+# Supersession (optional `superseded_by:` field):
+#   When work is replaced by a different item, mark the old item `dropped` and
+#   set `superseded_by:` to the replacing item's id. Validator enforces:
+#     - superseded item must have status `dropped`.
+#     - referenced id must exist and have valid format.
+#     - no cycles (A superseded_by B, B superseded_by A).
+#     - warning if the superseder is still in next/now (confirm it's real).
+#   The Health system surfaces `later` items that reference done/dropped items
+#   via this field (or spawned_from/related) as stale candidates for triage.
+#
+#   - id: ed-040
+#     title: "Old approach to caching"
+#     layer: data-layer
+#     status: dropped
+#     description: "<one sentence>"
+#     superseded_by: ed-065

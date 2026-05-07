@@ -3,7 +3,7 @@ import { effectiveStatus } from '../api/lib/phases';
 import styles from './SummaryStrip.module.css';
 
 export function SummaryStrip({ items }: { items: Item[] }) {
-  const counts = { now: 0, next: 0, later: 0, done: 0 };
+  const counts = { now: 0, next: 0, later: 0, done: 0, dropped: 0 };
   for (const i of items) counts[effectiveStatus(i)]++;
   return (
     <div className={styles.strip}>

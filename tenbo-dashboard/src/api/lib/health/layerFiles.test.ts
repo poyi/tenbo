@@ -8,16 +8,16 @@ describe('resolveLayerFiles', () => {
 
   it('returns repo-relative paths bucketed by layer', () => {
     if (!repoRoot) throw new Error('Could not find repo root');
-    // Use a real fixture: this repo's editor scope.
+    // Use a real fixture: this repo's health directory which has known .ts files.
     const scope: Scope = {
-      id: 'editor',
-      path: 'apps/editor',
+      id: 'dashboard',
+      path: 'tenbo-dashboard/src/api/lib/health',
       description: '',
       layers: [{
         id: 'visual-canvas',
         name: 'Visual Canvas',
         description: '',
-        files: ['src/domains/canvas/**'],
+        files: ['*.ts'],
         dependencies: { inbound: [], outbound: [], external: [] },
       }],
       items: [],
@@ -26,7 +26,7 @@ describe('resolveLayerFiles', () => {
     expect(result['visual-canvas']).toBeDefined();
     expect(result['visual-canvas'].length).toBeGreaterThan(0);
     // Paths are repo-relative
-    expect(result['visual-canvas'][0]).toMatch(/^apps\/editor\/src\/domains\/canvas\//);
+    expect(result['visual-canvas'][0]).toMatch(/^tenbo-dashboard\/src\/api\/lib\/health\//);
   });
 
   it('returns empty array for layer with no matching files', () => {

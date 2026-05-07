@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CornerLeftUp, ArrowLeftRight } from 'lucide-react';
+import { Archive, CornerLeftUp, ArrowLeftRight } from 'lucide-react';
 import type { Item } from '../types';
 import { effectiveStatus, phaseProgress } from '../api/lib/phases';
+import { useArchivedIds } from './ArchivedContext';
 import styles from './ItemCard.module.css';
 
 interface Props {
@@ -18,21 +19,21 @@ export function ItemCard({ item, onClick, onTitleEdit, onDescEdit }: Props) {
   const dragStyle = {
     transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.4 : 1,
+    ...(isDragging ? { opacity: 0.4 } : {}),
   };
   const [editing, setEditing] = useState<null | 'title' | 'desc'>(null);
   const phases = item.phases ?? [];
   const progress = phases.length > 0 ? phaseProgress(phases) : null;
 
-  // Done cards are dimmed in the kanban so the live columns (now/next/later)
-  // own the user's visual attention. Hover restores opacity. The item modal
-  // (rendered separately) is not affected — only the kanban card. (td-008)
-  const isDone = effectiveStatus(item) === 'done';
+  const archivedIds = useArchivedIds();
+  const isArchived = archivedIds.has(item.id);
+  const status = effectiveStatus(item);
+  const isDimmed = status === 'done' || status === 'dropped';
 
   return (
     <div
       ref={setNodeRef}
-      className={`${styles.card}${isDone ? ` ${styles.cardDone}` : ''}`}
+      className={`${styles.card}${isDimmed ? ` ${styles.cardDone}` : ''}${isArchived ? ` ${styles.cardArchived}` : ''}`}
       style={dragStyle}
       {...attributes}
       {...listeners}
@@ -46,6 +47,11 @@ export function ItemCard({ item, onClick, onTitleEdit, onDescEdit }: Props) {
       <div className={styles.id}>
         {item.priority && <span className={`${styles.priority} ${styles[item.priority]}`}>{item.priority.toUpperCase()}</span>}
         {item.id}
+        {isArchived && (
+          <span className={styles.archivedChip} title="Archived item" aria-label="Archived">
+            <Archive size={10} strokeWidth={1.75} />
+          </span>
+        )}
         {item.spawned_from && (
           <span
             className={styles.relChip}

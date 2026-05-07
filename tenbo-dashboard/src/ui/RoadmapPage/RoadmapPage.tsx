@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Columns2, List } from 'lucide-react';
+import { Archive, Columns2, List } from 'lucide-react';
 import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { LayerKanban } from '../LayerKanban';
 import { TaskList, type FlatItem } from '../TaskList';
@@ -7,6 +7,7 @@ import { effectiveStatus } from '../../api/lib/phases';
 import { tenboApi } from '../../api/client';
 import type { Route } from '../../router/routes';
 import type { Item, Layer, Status, TenboState } from '../../types';
+import { ArchivedIdsContext } from '../ArchivedContext';
 import styles from './RoadmapPage.module.css';
 
 const GENERAL_SCOPE = 'general';
@@ -42,12 +43,25 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
   const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+
+  /** IDs of archived items so we can tag them visually. */
+  const archivedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const scope of state.scopes) for (const i of scope.archivedItems ?? []) s.add(i.id);
+    return s;
+  }, [state]);
+
+  const totalArchived = archivedIds.size;
 
   const itemBySource = useMemo(() => {
     const m = new Map<string, { scopeId: string; item: Item }>();
-    for (const s of state.scopes) for (const i of s.items) m.set(i.id, { scopeId: s.id, item: i });
+    for (const s of state.scopes) {
+      for (const i of s.items) m.set(i.id, { scopeId: s.id, item: i });
+      if (showArchived) for (const i of s.archivedItems ?? []) m.set(i.id, { scopeId: s.id, item: i });
+    }
     return m;
-  }, [state]);
+  }, [state, showArchived]);
 
   const crossCuttingItems = state.crossCuttingRoadmap ?? [];
   const showGeneral = !scopeFilter || scopeFilter === GENERAL_SCOPE;
@@ -63,8 +77,12 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
     item.title.toLowerCase().includes(q) ||
     (item.description ?? '').toLowerCase().includes(q);
 
+  /** Merge active + archived items per scope when toggle is on. */
+  const scopeItems = (s: typeof state.scopes[number]) =>
+    showArchived ? [...s.items, ...(s.archivedItems ?? [])] : s.items;
+
   const allItems = [
-    ...visibleScopes.flatMap((s) => s.items).filter((i) => (!layerFilter || i.layer === layerFilter) && matchesSearch(i)),
+    ...visibleScopes.flatMap((s) => scopeItems(s)).filter((i) => (!layerFilter || i.layer === layerFilter) && matchesSearch(i)),
     ...visibleGeneral.filter(matchesSearch),
   ];
 
@@ -72,7 +90,7 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
     const result: FlatItem[] = [];
     for (const scope of visibleScopes) {
       const layerMap = new Map(scope.layers.map(l => [l.id, l.name]));
-      for (const item of scope.items) {
+      for (const item of scopeItems(scope)) {
         if (layerFilter && item.layer !== layerFilter) continue;
         if (!matchesSearch(item)) continue;
         result.push({ item, scopeId: scope.id, layerName: item.layer ? layerMap.get(item.layer) : undefined });
@@ -83,7 +101,7 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
     }
     return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, scopeFilter, layerFilter, search]);
+  }, [state, scopeFilter, layerFilter, search, showArchived]);
 
   const handleDragEnd = async (e: DragEndEvent) => {
     const activeId = String(e.active.id);
@@ -109,6 +127,7 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
   };
 
   return (
+    <ArchivedIdsContext.Provider value={archivedIds}>
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className={styles.stickyBar}>
         <RoadmapFilterBar
@@ -121,6 +140,9 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
           allItems={allItems}
           search={search}
           onSearchChange={setSearch}
+          showArchived={showArchived}
+          onToggleArchived={() => setShowArchived((v) => !v)}
+          archivedCount={totalArchived}
         />
       </div>
       <main style={{ padding: view === 'list' ? '16px 0 0' : 16 }}>
@@ -142,7 +164,7 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
                       layer={layer}
                       depth={depth}
                       alwaysOpen={!!layerFilter}
-                      items={scope.items.filter((i) => i.layer === layer.id && matchesSearch(i))}
+                      items={scopeItems(scope).filter((i) => i.layer === layer.id && matchesSearch(i))}
                       onCardClick={(item) => onCardClick(scope.id, item)}
                       onTitleEdit={(id, title) => onPatch(scope.id, id, { title })}
                       onDescEdit={(id, desc) => onPatch(scope.id, id, { description: desc })}
@@ -166,10 +188,11 @@ export function RoadmapPage({ state, scopeFilter, layerFilter, navigate, onCardC
         )}
       </main>
     </DndContext>
+    </ArchivedIdsContext.Provider>
   );
 }
 
-function RoadmapFilterBar({ scopes, scopeFilter, layerFilter, navigate, view, onViewChange, allItems, search, onSearchChange }: {
+function RoadmapFilterBar({ scopes, scopeFilter, layerFilter, navigate, view, onViewChange, allItems, search, onSearchChange, showArchived, onToggleArchived, archivedCount }: {
   scopes: TenboState['scopes'];
   scopeFilter: string | undefined;
   layerFilter: string | undefined;
@@ -179,9 +202,12 @@ function RoadmapFilterBar({ scopes, scopeFilter, layerFilter, navigate, view, on
   allItems: Item[];
   search: string;
   onSearchChange: (v: string) => void;
+  showArchived: boolean;
+  onToggleArchived: () => void;
+  archivedCount: number;
 }) {
   const activeScope = scopeFilter && scopeFilter !== GENERAL_SCOPE ? scopes.find((s) => s.id === scopeFilter) : undefined;
-  const counts = { now: 0, next: 0, later: 0, done: 0 };
+  const counts = { now: 0, next: 0, later: 0, done: 0, dropped: 0 };
   for (const i of allItems) counts[effectiveStatus(i)]++;
 
   return (
@@ -241,6 +267,18 @@ function RoadmapFilterBar({ scopes, scopeFilter, layerFilter, navigate, view, on
         onChange={(e) => onSearchChange(e.target.value)}
         aria-label="Search tasks by title"
       />
+
+      {archivedCount > 0 && (
+        <button
+          className={`${styles.archiveBtn} ${showArchived ? styles.archiveBtnActive : ''}`}
+          onClick={onToggleArchived}
+          aria-pressed={showArchived}
+          title={showArchived ? 'Hide archived items' : `Show ${archivedCount} archived item${archivedCount === 1 ? '' : 's'}`}
+        >
+          <Archive size={13} strokeWidth={1.75} />
+          {archivedCount}
+        </button>
+      )}
 
       {/* Counts — far right */}
       <div className={styles.filterSpacer} />

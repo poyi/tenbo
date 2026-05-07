@@ -39,6 +39,7 @@ const commands = {
   metrics: 'scripts/compute-metrics.ts',
   'init-check': 'scripts/init-check.ts',
   sync: 'scripts/sync.ts',
+  archive: 'scripts/archive.ts',
 };
 
 // Documented aliases for the bare-launch behavior. Users (and agents) reading
@@ -79,6 +80,8 @@ Usage:
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
   tenbo-dashboard next-id <prefix> Allocate next roadmap item ID
   tenbo-dashboard metrics --all    Compute scope metrics
+  tenbo-dashboard archive          Move old done/dropped items to roadmap-archive.yaml
+                                   [--scope <id>] [--days 30] [--max 20]
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
 

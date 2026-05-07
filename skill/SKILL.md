@@ -60,6 +60,7 @@ Just talk naturally:
 | A new idea, feature, task, wish, reminder, backlog item  | Work Intake and Planning → capture path       |
 | Code complexity, maintenance pain, "this feels messy"    | Health Review and Recommendations             |
 | Finishing or shipping a task                             | Completion and Sync                           |
+|| After coding (3+ files or new/deleted file, automatic)   | Micro-sync (proactive)                        |
 | Project status, what an area does, recent changes        | Project Summary                               |
 | Scaling concerns, architectural risk                     | Health Review and Recommendations             |
 | "Set up Tenbo" / no .tenbo/ exists                       | Initialize Project Memory                     |
@@ -232,14 +233,38 @@ For broad queries ("show me the roadmap"): suggest the dashboard (`npx tenbo-das
 
 ---
 
+### Micro-sync (proactive)
+
+*Fires automatically after code edits — no user prompt required.*
+
+> **Trigger:** agent just edited 3+ files (or created/deleted any file) AND at least one
+> changed file intersects a layer's `files` globs AND user did NOT explicitly say
+> "I finished X" (if they did, route to full Completion and Sync instead).
+>
+> **Procedure body:** load `references/micro-sync.md`. Three steps: map files → layers,
+> mechanical code-map update, quick validate. Completes in <5 seconds of agent time.
+> Surfaces one line or stays silent. Does NOT flip status, update narratives, or run
+> the completion bar — those require the full ceremony below.
+
+This is the **floor** for doc freshness. It ensures code-map.md never drifts more
+than one task behind, even when the full Completion and Sync is skipped.
+
+---
+
 ### Completion and Sync
 
-*Maps to: "I finished X", "just shipped X", or after any coding task.*
+*Maps to: "I finished X", "just shipped X", or when the agent recognizes a roadmap
+item's `done_when` criteria are satisfied.*
 
 > **Procedure body:** load `references/completion-sync.md`. Contains the short-circuit
 > gate, the no-roadmap-item path (reconciliation), the agent-coded path with completion-bar
 > gating, the rework path (hard reset, dispatch_attempts handling), and the subagent-coded
 > path (continuation vs final report, dispatch templates).
+>
+> **Proactive escalation:** if micro-sync ran and the agent recognizes that a `now` item's
+> `done_when` bullets are all evidently satisfied by the changes just made, escalate to
+> full Completion and Sync without waiting for the user to announce it. Ask: "Looks like
+> [title] is complete — want me to run the completion check?" Act on confirmation.
 
 ### Populate and Plan
 

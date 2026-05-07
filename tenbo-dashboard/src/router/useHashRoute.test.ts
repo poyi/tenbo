@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { parseHash, formatRoute } from './routes.js';
 
 describe('parseHash', () => {
-  it('defaults to docs project overview on empty hash', () => {
-    expect(parseHash('')).toEqual({ kind: 'docs-project', tab: 'overview' });
-    expect(parseHash('#/')).toEqual({ kind: 'docs-project', tab: 'overview' });
+  it('defaults to roadmap on empty hash', () => {
+    expect(parseHash('')).toEqual({ kind: 'roadmap' });
+    expect(parseHash('#/')).toEqual({ kind: 'roadmap' });
+  });
+  it('defaults to docs project overview on #/docs', () => {
     expect(parseHash('#/docs')).toEqual({ kind: 'docs-project', tab: 'overview' });
   });
   it('parses docs project tab', () => {

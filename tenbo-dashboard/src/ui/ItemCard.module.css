@@ -20,6 +20,15 @@
 .cardDone:hover {
   opacity: 1;
 }
+
+/* Archived items are even more subtle — dashed border signals "read-only historical". */
+.cardArchived {
+  opacity: 0.45;
+  border: 1px dashed var(--console-mist);
+}
+.cardArchived:hover {
+  opacity: 0.8;
+}
 .card:focus-visible {
   outline: 2px solid var(--signal-cyan);
   outline-offset: 2px;
@@ -66,6 +75,15 @@
   padding: 1px 6px;
   border-radius: var(--r-sm);
   white-space: nowrap;
+}
+
+.archivedChip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--console-smoke);
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+  background: var(--console-soot);
 }
 
 .titleInput {

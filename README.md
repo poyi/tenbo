@@ -264,6 +264,32 @@ rm -rf /tmp/tenbo
 npm install -g tenbo-dashboard@latest
 ```
 
+## Troubleshooting
+
+### Stale npx cache
+
+`npx` caches packages locally. If you previously ran an older `tenbo-dashboard`, the cache may keep serving the old binary even after a new version is published. Symptoms: commands that should exist don't, or bugs that were fixed reappear.
+
+**Fix:** force the latest version:
+
+```bash
+npx tenbo-dashboard@latest
+```
+
+Or clear the npx cache entirely:
+
+```bash
+npx clear-npx-cache
+```
+
+Then run `npx tenbo-dashboard` normally.
+
+> **Tip:** The installer (`install.sh`) checks for stale cached versions automatically and warns you if the resolved binary is older than the latest published release.
+
+### Dashboard shows "Loading..." for a long time
+
+First launch on a cold cache takes ~10 seconds while Vite optimizes the dependency graph. If it persists beyond that, check the terminal for errors. Running `npx tenbo-dashboard@latest` (see above) rules out stale-cache issues.
+
 ## Requirements
 
 - **Skill / rule package**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code) or [Cursor](https://cursor.com).

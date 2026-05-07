@@ -22,6 +22,7 @@ export function analyzeDocDrift(
   scopeId: string,
   layerId: string,
   layerFiles: string[],
+  scopePath?: string,
 ): Finding[] {
   const docPath = path.join(repoRoot, '.tenbo/scopes', scopeId, 'layers', layerId, 'code-map.md');
   if (!existsSync(docPath)) return [];
@@ -34,7 +35,9 @@ export function analyzeDocDrift(
   // 1. missing-ref: file in code-map.md doesn't exist on disk
   const broken: string[] = [];
   for (const ref of refs) {
-    if (!existsSync(path.join(repoRoot, ref))) broken.push(ref);
+    const existsAtRoot = existsSync(path.join(repoRoot, ref));
+    const existsAtScope = scopePath ? existsSync(path.join(repoRoot, scopePath, ref)) : false;
+    if (!existsAtRoot && !existsAtScope) broken.push(ref);
   }
   if (broken.length > 0) {
     const severity = broken.length >= 3 ? 'critical' : 'warning';

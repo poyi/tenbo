@@ -1,4 +1,4 @@
-import type { Scope } from '../../../types';
+import type { Item, Scope } from '../../../types';
 import type { Finding, Signal } from './types';
 import type { HealthConfig } from './config';
 import { resolveLayerFiles } from './layerFiles';
@@ -12,10 +12,12 @@ import type { ImportGraph } from './importGraph';
 import { analyzeDeadCode } from './deadCode';
 import { analyzeCoupling } from './coupling';
 import { analyzeRedundancy } from './redundancy';
+import { analyzeAgingSuperseded } from './agingSuperseded';
 
 interface AnalyzerArgs {
   repoRoot: string;
   scopeId: string;
+  scopePath?: string;
   layerId: string;
   files: string[];
   config: HealthConfig;
@@ -26,7 +28,8 @@ type AnalyzerFn = (args: AnalyzerArgs) => Finding[];
 const ANALYZERS: Record<Signal, AnalyzerFn | null> = {
   'hotspot-files':            ({ repoRoot, layerId, files, config }) => analyzeHotspotFiles(repoRoot, layerId, files, config),
   'aging-todos':              ({ repoRoot, layerId, files, config }) => analyzeAgingTodos(repoRoot, layerId, files, config),
-  'doc-drift':                ({ repoRoot, scopeId, layerId, files }) => analyzeDocDrift(repoRoot, scopeId, layerId, files),
+  'aging-superseded':         null, // scope-wide item analyzer, dispatched after the layer loop
+  'doc-drift':                ({ repoRoot, scopeId, layerId, files, scopePath }) => analyzeDocDrift(repoRoot, scopeId, layerId, files, scopePath),
   'test-coverage':            ({ repoRoot, layerId, files }) => analyzeTestCoverage(repoRoot, layerId, files),
   'architecture-compliance':  ({ layerId, files }) => analyzeArchCompliance(layerId, files),
   'dead-code':                ({ repoRoot, layerId, files, graph }) => graph ? analyzeDeadCode(repoRoot, layerId, files, graph) : [],
@@ -34,7 +37,7 @@ const ANALYZERS: Record<Signal, AnalyzerFn | null> = {
   'redundancy':               null, // Phase 4
 };
 
-export async function collectAll(repoRoot: string, scope: Scope, config: HealthConfig): Promise<Finding[]> {
+export async function collectAll(repoRoot: string, scope: Scope, config: HealthConfig, allItems?: Map<string, Item>): Promise<Finding[]> {
   const filesByLayer = resolveLayerFiles(repoRoot, scope);
   const allTsFiles = Object.values(filesByLayer).flat().filter(f => /\.tsx?$/.test(f));
   let graph: ImportGraph | undefined;
@@ -51,7 +54,7 @@ export async function collectAll(repoRoot: string, scope: Scope, config: HealthC
       if (!fn) continue;
       if (opted.has(signal)) continue;
       try {
-        out.push(...fn({ repoRoot, scopeId: scope.id, layerId: layer.id, files, config, graph }));
+        out.push(...fn({ repoRoot, scopeId: scope.id, scopePath: scope.path, layerId: layer.id, files, config, graph }));
       } catch (e) {
         // Analyzer failures don't break the whole report. Log and continue.
         console.error(`[health] analyzer ${signal} failed for layer ${layer.id}:`, e);
@@ -74,5 +77,15 @@ export async function collectAll(repoRoot: string, scope: Scope, config: HealthC
     return [] as Finding[];
   });
   out.push(...redundancyFindings.filter(f => !(config.ignore.layer_signals[f.layer] ?? []).includes('redundancy')));
+
+  // Aging-superseded is item-based (not file-based) — run once per scope
+  try {
+    const itemMap = allItems ?? new Map(scope.items.map(i => [i.id, i]));
+    const agingFindings = analyzeAgingSuperseded(scope, itemMap);
+    out.push(...agingFindings.filter(f => !(config.ignore.layer_signals[f.layer] ?? []).includes('aging-superseded')));
+  } catch (e) {
+    console.error('[health] aging-superseded failed:', e);
+  }
+
   return out;
 }

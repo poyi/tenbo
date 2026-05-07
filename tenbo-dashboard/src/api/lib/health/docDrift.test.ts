@@ -31,6 +31,24 @@ describe('analyzeDocDrift', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it('does NOT emit missing-ref when file exists under the scope path', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'drift-'));
+    const scopePath = 'tenbo-dashboard';
+    mkdirSync(path.join(root, scopePath, 'src'), { recursive: true });
+    writeFileSync(path.join(root, scopePath, 'src/main.tsx'), 'export default 1;\n');
+    mkdirSync(path.join(root, '.tenbo/scopes/dashboard/layers/lyr'), { recursive: true });
+    writeFileSync(
+      path.join(root, '.tenbo/scopes/dashboard/layers/lyr/code-map.md'),
+      'Entry point: `src/main.tsx`.\n',
+    );
+    const findings = analyzeDocDrift(root, 'dashboard', 'lyr', [], scopePath);
+    const broken = findings.find(f =>
+      f.details.kind === 'doc-drift' && f.details.drift_type === 'missing-ref'
+    );
+    expect(broken).toBeUndefined();
+    rmSync(root, { recursive: true, force: true });
+  });
+
   it('emits unreferenced-file info finding when a layer file is not mentioned in code-map.md', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'drift-'));
     mkdirSync(path.join(root, 'apps/editor/src'), { recursive: true });

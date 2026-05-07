@@ -104,36 +104,40 @@ A roadmap item MAY include an optional `phases:` list to track multi-phase work 
 39. **Phase non-`done` with `completed_at`.** When `completed_at` is set, the status SHOULD be `done`.
 40. **Item has both `status:` and `phases:`.** When phases are present the item-level status is derived; drop the explicit `status:` line.
 
-## Relationship fields (optional `spawned_from:` and `related:`)
+## Relationship fields (optional `spawned_from:`, `superseded_by:`, and `related:`)
 
-Roadmap items MAY include two optional fields that record cross-task relationships
+Roadmap items MAY include optional fields that record cross-task relationships
 explicitly (instead of burying parent/peer trails in `notes:` prose):
 
 - **`spawned_from`** — at most one id. The roadmap item that surfaced/dispatched this one.
+- **`superseded_by`** — at most one id. The item that replaced this one. When set, the item's status must be `dropped`.
 - **`related`** — a list of peer ids. Any number; order is not significant; not parent–child.
 
-Both follow the standard id pattern (`<prefix>-NNN` or `x-NNN`). An item may have
-neither, either, or both. Items without these fields render unchanged in the viewer.
+All follow the standard id pattern (`<prefix>-NNN` or `x-NNN`). An item may have
+none, any, or all. Items without these fields render unchanged in the viewer.
 
 Convention (Behavior 5 DoD): when a subagent's report surfaces a follow-up item,
 the new item should set `spawned_from` to the item that triggered the dispatch.
 
 ### Phase-5 errors
 
-41. **Relationship id format invalid.** `spawned_from` and every entry in `related`
-    must match `^[a-z]{1,5}-\d{3,}$`.
-42. **Self-reference.** `spawned_from` must not equal the item's own id; `related`
-    must not contain the item's own id.
+41. **Relationship id format invalid.** `spawned_from`, `superseded_by`, and every
+    entry in `related` must match `^[a-z]{1,5}-\d{3,}$`.
+42. **Self-reference.** `spawned_from`/`superseded_by` must not equal the item's own
+    id; `related` must not contain the item's own id.
+46. **Supersession cycle.** A superseded_by B, B superseded_by A.
 
 ### Phase-5 warnings
 
-43. **Unknown id reference.** `spawned_from` or any entry in `related` references
-    an id that doesn't exist in any scope's roadmap or in the cross-cutting
-    roadmap. Warning (not error) because items may be tracked before the
-    referenced item is created.
+43. **Unknown id reference.** `spawned_from`, `superseded_by`, or any entry in
+    `related` references an id that doesn't exist in any scope's roadmap or in
+    the cross-cutting roadmap. Warning (not error) because items may be tracked
+    before the referenced item is created.
 44. **Duplicate id in `related`.** Same id appears more than once in the list.
 45. **Same id in both fields.** An id appears in both `spawned_from` and `related`
     on the same item (redundant — `spawned_from` already records the link).
+47. **Superseded but not dropped.** An item has `superseded_by` set but status is
+    not `dropped`.
 
 ## Adaptive onboarding rules (warnings)
 

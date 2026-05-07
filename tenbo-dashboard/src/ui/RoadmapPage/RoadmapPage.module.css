@@ -91,3 +91,25 @@
 .viewBtn:hover:not(.viewBtnActive) {
   color: var(--console-snow);
 }
+
+/* Archive toggle — pill style, matches viewBtn feel */
+.archiveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--console-fog);
+  background: var(--console-iron);
+  transition: background var(--dur-state) var(--ease), color var(--dur-state) var(--ease);
+  white-space: nowrap;
+}
+.archiveBtn:hover {
+  color: var(--console-snow);
+}
+.archiveBtnActive {
+  background: var(--console-mist);
+  color: var(--signal-cyan);
+}

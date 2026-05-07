@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, renameSync, statSync, type Stats } from 'node:fs';
 import path from 'node:path';
-import { parse as parseSimple } from 'yaml';
+import { parse as parseSimple, stringify as yamlStringify } from 'yaml';
 import { parseYaml, stringifyYaml, patchSeqItem, reorderSeqItems } from './yamlOrdered';
 import { getCached, invalidate as invalidateCache } from './parseCache';
 import type { TenboState, Scope, Item, Layer, CrossCutting, LayerDocs, ScopeMetrics, WorkspaceContent, LayerContent } from '../../types';
@@ -67,6 +67,13 @@ function readArchitecture(repoRoot: string, scopeId: string): Layer[] {
 function readRoadmap(repoRoot: string, scopeId: string): Item[] {
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
   const data = getCached(file, 'roadmap-yaml', (text) => parseSimple(text) as any);
+  return data?.items ?? [];
+}
+
+export function readRoadmapArchive(repoRoot: string, scopeId: string): Item[] {
+  const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap-archive.yaml');
+  if (!existsSync(file)) return [];
+  const data = getCached(file, 'roadmap-archive-yaml', (text) => parseSimple(text) as any);
   return data?.items ?? [];
 }
 
@@ -194,6 +201,7 @@ export function readState(repoRoot: string): TenboState {
     description: ref.description,
     layers: readArchitecture(repoRoot, ref.id),
     items: readRoadmap(repoRoot, ref.id),
+    archivedItems: readRoadmapArchive(repoRoot, ref.id),
   }));
   const narratives = scopes.reduce<Record<string, string>>((acc, s) => {
     return Object.assign(acc, readNarratives(repoRoot, s.id));
@@ -241,4 +249,40 @@ export function reorderItems(repoRoot: string, scopeId: string, idsInOrder: stri
   const doc = parseYaml(text);
   reorderSeqItems(doc, 'items', idsInOrder);
   atomicWrite(file, stringifyYaml(doc));
+}
+
+/**
+ * Move items from roadmap.yaml to roadmap-archive.yaml for the given scope.
+ * Creates the archive file if it doesn't exist. Uses atomic writes for both files.
+ */
+export function archiveItems(repoRoot: string, scopeId: string, itemIds: string[]): void {
+  if (itemIds.length === 0) return;
+
+  const roadmapFile = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
+  const archiveFile = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap-archive.yaml');
+
+  // Read roadmap and find matching items
+  const roadmapText = readFileSync(roadmapFile, 'utf8');
+  const roadmapData = parseSimple(roadmapText) as any;
+  const allItems: Item[] = roadmapData?.items ?? [];
+
+  const idsToArchive = new Set(itemIds);
+  const itemsToArchive = allItems.filter(i => idsToArchive.has(i.id));
+  const remainingItems = allItems.filter(i => !idsToArchive.has(i.id));
+
+  if (itemsToArchive.length === 0) return;
+
+  // Read existing archive
+  let archiveItems: Item[] = [];
+  if (existsSync(archiveFile)) {
+    const archiveData = parseSimple(readFileSync(archiveFile, 'utf8')) as any;
+    archiveItems = archiveData?.items ?? [];
+  }
+
+  // Append archived items
+  archiveItems.push(...itemsToArchive);
+
+  // Write both files atomically
+  atomicWrite(roadmapFile, yamlStringify({ items: remainingItems }, { lineWidth: 0, blockQuote: 'literal' }));
+  atomicWrite(archiveFile, yamlStringify({ items: archiveItems }, { lineWidth: 0, blockQuote: 'literal' }));
 }

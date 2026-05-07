@@ -12,6 +12,7 @@ Optional fields items in `roadmap.yaml` may carry:
 - `notes:` — markdown string with timestamped context notes.
 - `doc_update:` — ISO date (`2026-04-28`) or `skipped — <reason>`; required for `done` items of type feature/bug/refactor. The validator warns when absent.
 - `spawned_from:` — id of the item that surfaced this one.
+- `superseded_by:` — id of the item that replaced this one. Item must be `dropped`.
 - `related:` — peer item ids (not parent–child).
 - `phases:` — `[{ id, title, status, completed_at?, notes? }]` for multi-phase items. Item-level `status` is derived when `phases:` is present.
 - `affects:` — `[layer-id]` (same scope) or `[scope-id:layer-id]` (cross-scope).

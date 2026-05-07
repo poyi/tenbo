@@ -9,6 +9,7 @@ export type Signal =
   | 'doc-drift'
   | 'test-coverage'
   | 'aging-todos'
+  | 'aging-superseded'
   | 'architecture-compliance'
   | 'redundancy';
 
@@ -20,7 +21,8 @@ export type ActionKind =
   | 'move-file'
   | 'update-doc'
   | 'add-test'
-  | 'resolve-todo';
+  | 'resolve-todo'
+  | 'triage-item';
 
 export interface Suggestion {
   summary: string;       // imperative one-liner
@@ -36,6 +38,7 @@ export type FindingDetails =
   | { kind: 'doc-drift'; drift_type: 'missing-ref' | 'unreferenced-file' | 'stale-section'; doc_path: string; doc_mtime_iso: string | null; code_mtime_iso: string | null; affected_files: string[] }
   | { kind: 'test-coverage'; suggested_test_path: string }
   | { kind: 'aging-todos'; line: number; age_days: number; commit_hash: string; author: string; text: string; context: string }
+  | { kind: 'aging-superseded'; item_id: string; item_title: string; age_days: number; referenced_items: { id: string; status: string }[] }
   | { kind: 'architecture-compliance'; expected_path_pattern: string; actual_path: string; rule: string }
   | { kind: 'redundancy'; copies: { path: string; lines: [number, number] }[]; similarity_pct: number };
 
@@ -66,6 +69,7 @@ export const SIGNAL_WEIGHTS_DEFAULT: Signal[] = [
   'doc-drift',
   'test-coverage',
   'aging-todos',
+  'aging-superseded',
 ];
 
 export const CONFIDENCE_RANK: Record<Confidence, number> = {

@@ -19,6 +19,7 @@ const SIGNAL_LABELS: Record<Signal, string> = {
   'doc-drift': 'Doc drift',
   'test-coverage': 'Test coverage',
   'aging-todos': 'Aging TODOs',
+  'aging-superseded': 'Stale later items',
   'architecture-compliance': 'Architecture compliance',
   'redundancy': 'Redundancy',
 };

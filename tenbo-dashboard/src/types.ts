@@ -65,6 +65,12 @@ export interface Item {
    */
   spawned_from?: string;
   /**
+   * The id of the item that replaced/superseded this one. When set, the item's
+   * status should be `dropped`. The validator enforces this constraint and checks
+   * for cycles and dangling references.
+   */
+  superseded_by?: string;
+  /**
    * Peer relationships. Any number of ids in the same format. Order is not significant.
    * Not parent–child — for that use `spawned_from`.
    */
@@ -102,6 +108,7 @@ export interface Scope {
   description: string;
   layers: Layer[];
   items: Item[];
+  archivedItems?: Item[];
 }
 
 export interface CrossCutting {
