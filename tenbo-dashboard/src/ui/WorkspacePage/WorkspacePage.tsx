@@ -3,14 +3,16 @@ import type { TenboState } from '../../types';
 import { OverviewTab } from './tabs/OverviewTab';
 import { PrinciplesTab } from './tabs/PrinciplesTab';
 import { GlossaryTab } from './tabs/GlossaryTab';
+import { DecisionsTab } from './tabs/DecisionsTab';
 import styles from './WorkspacePage.module.css';
 
-const TABS: WorkspaceTab[] = ['overview', 'principles', 'glossary'];
+const TABS: WorkspaceTab[] = ['overview', 'principles', 'glossary', 'decisions'];
 
 const TAB_LABELS: Record<WorkspaceTab, string> = {
   'overview': 'Project overview',
   'principles': 'Principles',
   'glossary': 'Glossary',
+  'decisions': 'Decisions',
 };
 
 export function WorkspacePage(props: { tab: WorkspaceTab; navigate: (r: Route) => void; state: TenboState }) {
@@ -30,6 +32,7 @@ export function WorkspacePage(props: { tab: WorkspaceTab; navigate: (r: Route) =
         {props.tab === 'overview' && <OverviewTab state={props.state} navigate={props.navigate} />}
         {props.tab === 'principles' && <PrinciplesTab state={props.state} />}
         {props.tab === 'glossary' && <GlossaryTab state={props.state} />}
+        {props.tab === 'decisions' && <DecisionsTab state={props.state} />}
       </div>
     </div>
   );

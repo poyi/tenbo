@@ -161,6 +161,11 @@ export interface TenboState {
    * resolve to a real file. Absent when `.tenbo/specs/` does not exist.
    */
   specFiles?: Set<string>;
+  /**
+   * Decision records loaded from `.tenbo/decisions/`. Absent if the directory
+   * does not exist. Keyed by slug for `superseded_by` resolution.
+   */
+  decisions?: Record<string, DecisionRecord>;
 }
 
 export type ValidateLevel = 'error' | 'warning';
@@ -198,6 +203,30 @@ export interface WorkspaceContent {
   principlesMtime: number | null;
   glossaryMtime: number | null;
   observationsMtime: number | null;
+}
+
+/**
+ * Project-level decision record loaded from `.tenbo/decisions/<slug>.md`.
+ * Only created when a future audit would re-suggest the same thing without
+ * the rationale. See `skill/templates/decision.md.tmpl` for the shape.
+ */
+export interface DecisionRecord {
+  /** repo-relative path, e.g. `.tenbo/decisions/foo.md` */
+  path: string;
+  /** filename slug without extension */
+  slug: string;
+  /** parsed frontmatter — values may be missing on malformed files */
+  frontmatter: {
+    id?: string;
+    date?: string;
+    status?: 'accepted' | 'superseded' | string;
+    title?: string;
+    related_items?: string[];
+    superseded_by?: string;
+    [k: string]: unknown;
+  };
+  /** body content after frontmatter (markdown) */
+  body: string;
 }
 
 export interface LayerContent {

@@ -3,7 +3,8 @@ import type { Item } from '../types';
 import { tenboApi } from '../api/client';
 
 export function useApiPatch() {
-  return useCallback((scopeId: string, itemId: string, patch: Partial<Item>) => {
-    return tenboApi.patchItem(scopeId, itemId, patch);
+  return useCallback(async (scopeId: string, itemId: string, patch: Partial<Item>): Promise<Item> => {
+    const { item } = await tenboApi.patchItem(scopeId, itemId, patch);
+    return item;
   }, []);
 }

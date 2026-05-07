@@ -1,0 +1,36 @@
+<!--
+Project-level decision record. ONE FILE PER DECISION. Filename: <slug>.md.
+
+Load-bearing test: only create this when a future audit/health pass would
+re-suggest the same thing without this record. Skip ephemeral reasons ("not
+worth it now"), self-evident ones, and decisions that fit elsewhere:
+
+  - layer-scoped call → that layer's intent.md `Boundary decisions:` list
+  - active rule the codebase must obey → principles.md
+  - cross-layer / project-level "we considered X, declined because Y" → here
+
+When a later decision overturns this one: set `status: superseded`,
+`superseded_by: <new-slug>`, and leave the file in place. Do not delete.
+-->
+---
+id: <short-slug>
+date: YYYY-MM-DD
+status: accepted   # accepted | superseded
+title: <one-line headline>
+related_items: []  # optional list of roadmap ids (e.g. [sk-011])
+# superseded_by: <slug>  # required only when status is superseded
+---
+
+# {{title}}
+
+## Context
+<!-- What was on the table. Forces and constraints. Be concrete. -->
+
+## Decision
+<!-- What we chose, in one or two sentences. -->
+
+## Consequences
+<!-- What this commits us to, what it forecloses, who pays the cost. -->
+
+## When to revisit
+<!-- Concrete trigger conditions. "If X happens, reopen this." -->

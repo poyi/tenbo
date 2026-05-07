@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse as parseSimple, stringify as yamlStringify } from 'yaml';
 import { parseYaml, stringifyYaml, patchSeqItem, reorderSeqItems } from './yamlOrdered';
 import { getCached, invalidate as invalidateCache } from './parseCache';
-import type { TenboState, Scope, Item, Layer, CrossCutting, LayerDocs, ScopeMetrics, WorkspaceContent, LayerContent } from '../../types';
+import type { TenboState, Scope, Item, Layer, CrossCutting, LayerDocs, ScopeMetrics, WorkspaceContent, LayerContent, DecisionRecord } from '../../types';
 
 function tenboDir(repoRoot: string) { return path.join(repoRoot, '.tenbo'); }
 
@@ -193,6 +193,43 @@ export function readSpecFiles(repoRoot: string): Set<string> | undefined {
   return out;
 }
 
+/**
+ * Read project-level decision records from `.tenbo/decisions/*.md`.
+ * Returns undefined if the directory does not exist (graceful no-op).
+ * Frontmatter is parsed leniently — malformed entries are still returned
+ * with whatever fields could be parsed; the validator surfaces issues.
+ */
+export function readDecisions(repoRoot: string): Record<string, DecisionRecord> | undefined {
+  const dir = path.join(tenboDir(repoRoot), 'decisions');
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return undefined;
+  const out: Record<string, DecisionRecord> = {};
+  for (const entry of readdirSync(dir)) {
+    if (!entry.endsWith('.md')) continue;
+    const full = path.join(dir, entry);
+    if (!statSync(full).isFile()) continue;
+    const text = readFileSync(full, 'utf8');
+    const slug = entry.replace(/\.md$/, '');
+    const fmMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    let frontmatter: Record<string, unknown> = {};
+    let body = text;
+    if (fmMatch) {
+      try {
+        frontmatter = (parseSimple(fmMatch[1]) as Record<string, unknown>) ?? {};
+      } catch {
+        frontmatter = {};
+      }
+      body = fmMatch[2] ?? '';
+    }
+    out[slug] = {
+      path: `.tenbo/decisions/${entry}`,
+      slug,
+      frontmatter: frontmatter as DecisionRecord['frontmatter'],
+      body,
+    };
+  }
+  return out;
+}
+
 export function readState(repoRoot: string): TenboState {
   const ws = readWorkspace(repoRoot);
   const scopes: Scope[] = ws.scopeRefs.map(ref => ({
@@ -222,6 +259,8 @@ export function readState(repoRoot: string): TenboState {
   if (Object.keys(metrics).length > 0) state.metrics = metrics;
   const specFiles = readSpecFiles(repoRoot);
   if (specFiles) state.specFiles = specFiles;
+  const decisions = readDecisions(repoRoot);
+  if (decisions) state.decisions = decisions;
   return state;
 }
 

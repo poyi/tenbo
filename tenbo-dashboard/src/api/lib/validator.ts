@@ -324,6 +324,48 @@ export function validate(state: TenboState): ValidateResult {
     }
   }
 
+  // Decision records (sk-020). Validate frontmatter shape on every file under
+  // `.tenbo/decisions/`. Additive: state.decisions is undefined when the
+  // directory does not exist, so existing repos without decisions/ stay quiet.
+  if (state.decisions) {
+    const VALID_DECISION_STATUSES = new Set(['accepted', 'superseded']);
+    const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const decisions = state.decisions;
+    for (const slug of Object.keys(decisions)) {
+      const rec = decisions[slug];
+      const fm = rec.frontmatter ?? {};
+      const where = rec.path;
+      // Required fields → errors.
+      for (const field of ['id', 'date', 'status', 'title'] as const) {
+        const v = fm[field];
+        if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
+          errors.push({ level: 'error', message: `decision ${where} is missing required frontmatter field "${field}"` });
+        }
+      }
+      if (typeof fm.status === 'string' && !VALID_DECISION_STATUSES.has(fm.status)) {
+        errors.push({ level: 'error', message: `decision ${where} has invalid status "${fm.status}" (expected accepted|superseded)` });
+      }
+      if (fm.date !== undefined && typeof fm.date === 'string' && fm.date.trim() !== '' && !ISO_DATE_RE.test(fm.date.trim())) {
+        warnings.push({ level: 'warning', message: `decision ${where} date "${fm.date}" is not YYYY-MM-DD` });
+      }
+      if (fm.status === 'superseded') {
+        const sb = fm.superseded_by;
+        if (typeof sb !== 'string' || sb.trim() === '') {
+          errors.push({ level: 'error', message: `decision ${where} has status:superseded but no superseded_by` });
+        } else if (!state.decisions[sb]) {
+          errors.push({ level: 'error', message: `decision ${where} superseded_by "${sb}" does not match a sibling decision file` });
+        } else if (sb === slug) {
+          errors.push({ level: 'error', message: `decision ${where} superseded_by cannot reference itself` });
+        }
+      } else if (fm.superseded_by !== undefined && fm.status !== 'superseded') {
+        warnings.push({ level: 'warning', message: `decision ${where} has superseded_by but status is "${fm.status ?? 'unset'}"` });
+      }
+      if (fm.related_items !== undefined && !Array.isArray(fm.related_items)) {
+        warnings.push({ level: 'warning', message: `decision ${where} related_items should be a list` });
+      }
+    }
+  }
+
   const allRefs = new Set(state.scopes.flatMap(s => s.layers.map(l => `${s.id}:${l.id}`)));
   for (const item of state.crossCuttingRoadmap ?? []) {
     const refs = [...(item.layers ?? []), ...(item.affects ?? [])];

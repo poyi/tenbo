@@ -40,6 +40,8 @@ const IGNORE_GLOBS = [
   '**/*.swx',     // vim
   '**/*~',        // many editors' backup
   '**/4913',      // vim's pre-write probe
+  '**/*.tmp',     // simple atomic-rename staging
+  '**/*.tmp.*',   // tenboFs.ts atomic writes use `<file>.tmp.<PID>.<ts>` suffix
   '**/.DS_Store', // macOS
   '**/.git/**',
   '**/node_modules/**',

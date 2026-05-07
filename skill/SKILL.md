@@ -336,12 +336,27 @@ deps, narrative drift, glossary gaps, recomputed metrics. Same diff format, labe
 **Pre-requisite:** `intent.md` must be populated. If empty: offer to fill it first.
 **Broad scope** (>5 layers): warn on cost, offer layer-by-layer.
 
-1. Resolve target. Load layer constraints, `metrics.json`, open+done items (dedupe).
+1. Resolve target. Load layer constraints, `metrics.json`, open+done items (dedupe),
+   and any active records under `.tenbo/decisions/` (skip files with `status: superseded`).
 2. Read source: walk layer globs, sample entry points, skim files >300 lines. Cap ~30 files.
 3. Generate candidates — every one must cite a specific rule:
    `[invariant]` `[anti-resp]` `[principle]` `[boundary]` `[refactor]` `[threshold]` `[gap]` `[stale]`
    Missing tenbo docs are NOT candidates — route to populate path.
-4. De-duplicate. Present triage list. Wait for picks.
+   **Two-adapters rule (`[boundary]` only, runs first):** count concrete adapters/implementations
+   exercising the proposed seam *today*. ≥2 → keep. 1 → demote to a one-line observation
+   (hypothetical seam, not a roadmap item). 0 → drop (pure speculation). Apply before the
+   deletion test below.
+   **Deletion test (final filter):** for each candidate, imagine deleting the module/layer it
+   targets. If complexity vanishes, it was a pass-through — drop the candidate. If complexity
+   reappears across 2+ callers, the friction is real — keep it, and note the outcome on the
+   surfaced item (e.g., "deletion-test: complexity reappears in 3 callers").
+   **Decisions filter:** suppress any candidate matching an active record in
+   `.tenbo/decisions/`; surface as a one-line observation `previously declined — see decisions/<file>`.
+4. De-duplicate. Present triage list. Wait for picks. When the user rejects a candidate
+   for a load-bearing, durable reason that future audits would re-surface, offer to write
+   a `.tenbo/decisions/<slug>.md` (template: `templates/decision.md.tmpl`). Skip the offer
+   for ephemeral or self-evident rejections, and for layer-scoped calls (those go in the
+   layer's `intent.md` `Boundary decisions:`).
 5. For accepted candidates: generate fully-enriched items (id, title, description, type,
    priority, `files_to_read`, `done_when`, `risks`, notes with audit provenance).
    Type derived: refactor/threshold/stale → `refactor`; gap → `feature`; others → `bug`.

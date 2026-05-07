@@ -110,6 +110,36 @@ End-to-end walkthroughs the skill can refer back to. Use the same tone and struc
 14. Runs validation. Passes.
 15. Confirms: "Added 'AI applies preset to selected component' to AI Assistant as ed-047, also affecting Design Tokens. Status: later. done_when, files_to_read, and risks filled in."
 
+## Example 8: Audit deletion-test filter
+
+**User:** "Audit the AI Assistant layer."
+
+**Skill:** Walks the layer, drafts five raw candidates, then runs the deletion test on each before surfacing the triage list. Two illustrative cases:
+
+- **Kept — `[anti-resp]` "PromptBuilder mixes tool-schema assembly with retry/backoff."**
+  Deletion test: if `PromptBuilder` is removed, three call sites (chat, batch-revise, preset-apply) each have to re-implement schema assembly *and* retry policy independently. Complexity reappears across 3 callers — the friction is real. Surfaced with note: "deletion-test: complexity reappears in 3 callers."
+
+- **Dropped — `[refactor]` "ToolDispatcher wraps a single switch on tool name; consider splitting per tool."**
+  Deletion test: if `ToolDispatcher` is removed, callers call the underlying tool functions directly. No complexity reappears — it was a pass-through. Drop the candidate; do not surface.
+
+The remaining three candidates pass the test on their own merits and go to triage normally. The user sees four candidates, not five, and each carries its deletion-test provenance when informative.
+
+---
+
+## Example 9: Audit two-adapters filter on `[boundary]` candidates
+
+**User:** "Audit the Tokens & Themes layer."
+
+**Skill:** Generates two `[boundary]` candidates and applies the two-adapters rule before the deletion test:
+
+- **Kept — `[boundary]` "Split `TokenResolver` into a `TokenSource` interface; CSS-vars and JSON-export both resolve tokens via divergent paths."**
+  Two adapters exist today: the runtime CSS-vars resolver and the JSON export resolver each implement their own lookup. Real seam — keep, then run deletion test as usual.
+
+- **Demoted to observation — `[boundary]` "Introduce a `ThemeStorage` adapter so persistence is swappable."**
+  Only one adapter today (localStorage); no second backend, no test fake exercising the seam. Hypothetical. Demoted to a one-line audit note: "ThemeStorage has one implementation; revisit if a second backend appears." Not surfaced as a roadmap item.
+
+The user sees one `[boundary]` item in triage, plus the observation in the audit summary. Speculative seams don't clutter the roadmap.
+
 ---
 
 ## Example: Populated `principles.md` (single-scope visual editor app)

@@ -2,7 +2,7 @@ export type WorkspaceTab = typeof WORKSPACE_TABS[number];
 export type LayerTab = typeof LAYER_TABS[number];
 export type Mode = 'docs' | 'roadmap' | 'health';
 
-const WORKSPACE_TABS = ['overview', 'principles', 'glossary'] as const;
+const WORKSPACE_TABS = ['overview', 'principles', 'glossary', 'decisions'] as const;
 const LAYER_TABS = ['overview', 'purpose', 'files', 'docs'] as const;
 
 export type Route =
