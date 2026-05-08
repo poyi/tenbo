@@ -34,6 +34,16 @@ already run by the session gate). Use repo size to choose the init path.
 6. **Jargon scrub.** Check descriptions against `tenbo-plain-english.mdc` before writing.
 7. **Derive scope prefixes.** Multi-word → initials; ≤5 chars → as-is; >5 chars → first 2 letters.
    Resolve collisions. Cross-scope always `x`. Confirm.
+7a. **Ask for product goals.** Before scaffolding `overview.md`, ask once:
+    *"Before I write the project overview — what 3 to 6 goals is this project
+    optimizing for? (One short sentence each. We can refine later.)"*
+    Capture as `g1`/`g2`/`g3`/... (lowercase `g` + integer). Also offer:
+    *"Anything explicitly out of scope worth listing as a non-goal?"* (deferrable).
+    If the user defers either prompt, scaffold the section with a placeholder
+    block per the existing non-interactive convention:
+    `<!-- Assumed: goals not yet captured. Refine with the user when convenient. -->`
+    Goals belong in `overview.md` only — do NOT add per-layer goals as a separate
+    field. Layer-level direction is captured via `Optimizing for` in `intent.md`.
 8. **Write all files.** Unconditional — every file below is created on every init:
    - `.tenbo/workspace.yaml` (with `maturity: early`).
    - `.tenbo/overview.md`.
@@ -140,6 +150,24 @@ and use a conversation-driven approach:
 
 `.tenbo/roadmap.yaml` for items spanning scopes. Prefix `x-NNN`. Cross-scope `affects:`
 uses `[scope-id:layer-id]`. Create from template if absent.
+
+## Migration: existing projects missing product goals
+
+For projects initialized before product goals existed: on the first session
+after the upgrade, if `.tenbo/overview.md` lacks a `## Product goals` section,
+the agent offers ONCE per session:
+
+> *"No product goals set yet. Want to define them now? Same setup-time prompt
+> — 3 to 6 goals, one sentence each, deferrable."*
+
+Behavior:
+- **Accept**: capture goals, insert the `## Product goals` section near the
+  top of `overview.md` (after the elevator pitch, before `## Scopes`), and
+  optionally prompt for non-goals.
+- **Decline**: drop the offer for the rest of the session. Do not nag again
+  this conversation. The next session may offer again.
+- This check runs at most once per session and is silent (no offer surfaced)
+  when the section is already present.
 
 ## Ceremony reduction
 

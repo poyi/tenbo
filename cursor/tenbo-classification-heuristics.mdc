@@ -66,6 +66,18 @@ Cross-scope items live in `.tenbo/roadmap.yaml` (workspace scope), use the `x-NN
 - `status`: `later` unless the user says otherwise (now / next / later).
 - `description`: rewrite the user's phrasing into one non-engineer-readable sentence. Confirm with the user if you changed meaning.
 
+## Audit `[boundary]` candidates: the two-adapters rule
+
+The two-adapters rule applies *only* to candidates that *propose a new seam* — a split, a new interface, an ownership change. Count the concrete adapters/implementations that would exercise the proposed seam *today* (not hypothetical future ones):
+
+- **≥2 adapters → keep.** Something actually varies across the seam; the abstraction earns its keep.
+- **1 adapter → demote to observation.** One implementation is a hypothetical seam, not a real one. Surface as a one-line note ("only one caller varies here today; revisit if a second appears"), not a roadmap item.
+- **0 adapters → drop.** Pure speculation. No surface.
+
+**Skip this rule for `[boundary]` candidates flagging *violations of existing layer boundaries*** (e.g., a data-layer file importing from UI). Those don't have "adapters" to count — surface them directly. The rule is for new-seam proposals, not for existing-boundary breaches.
+
+This filter runs *before* the deletion test in the Audit subroutine.
+
 ## Anti-patterns
 
 - **Don't dump items into a generic catch-all layer.** If you can't classify, ask.
