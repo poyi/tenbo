@@ -29,7 +29,13 @@ const baseItem = (over: Partial<Item> = {}): Item => ({
 const errMsgsFor = (state: TenboState, id: string) =>
   validate(state).errors.filter((e) => e.itemId === id).map((e) => e.message);
 const warnMsgsFor = (state: TenboState, id: string) =>
-  validate(state).warnings.filter((e) => e.itemId === id).map((e) => e.message);
+  validate(state).warnings
+    .filter((e) => e.itemId === id)
+    .map((e) => e.message)
+    // Exclude goal_ref warnings — sk-025 added a missing-goal_ref warning that
+    // fires on every active item without one. Tests in this file predate
+    // goal_ref and assert "no warnings" for unrelated relationship cases.
+    .filter((m) => !m.includes('goal_ref'));
 
 describe('validator — relationships', () => {
   it('accepts well-formed spawned_from + related with no errors or warnings', () => {

@@ -142,6 +142,39 @@ The user sees one `[boundary]` item in triage, plus the observation in the audit
 
 ---
 
+## Example 10: Capture path with clean goal alignment
+
+**User:** "We should add a layer-narrative diff view so users can see what changed in `intent.md` between sessions."
+
+**Skill:**
+1. Classifies under the dashboard's UI Components layer (single match, high confidence).
+2. Reads product goals from `overview.md`. Maps the item to **g1** (persistent context across sessions) — diff view makes drift in context legible to the user.
+3. Drafts the item with `goal_ref: [g1]` and the rationale phrase: "makes session-to-session context drift visible."
+4. Appends to roadmap. Confirms: "Added 'Layer-narrative diff view' to UI Components as ui-031 — advances g1 by making session-to-session context drift visible."
+
+## Example 11: Capture path that triggers the goal follow-up
+
+**User:** "Add a thing that plays a victory sound when an item is marked done."
+
+**Skill:**
+1. Classifies under the dashboard's UI Components layer.
+2. Reads product goals from `overview.md`. None of g1/g2/g3 (persistent context, modularity, proactive refactor surfacing) cleanly cover a celebratory sound effect.
+3. Asks: "This doesn't obviously advance g1/g2/g3. What's the angle, or should I file as exploratory?"
+
+**Branch A — user supplies rationale:**
+
+**User:** "It's a feedback signal — agents and humans both use the dashboard, and audible completion makes batch-execute progress legible without staring at the screen. That's part of g1."
+
+**Skill:** Captures as `goal_ref: [g1]` with rationale "audible batch-progress signal so humans don't have to watch the screen." Appends and confirms in one line.
+
+**Branch B — user defers:**
+
+**User:** "Honestly it's a nice-to-have, just file it."
+
+**Skill:** Captures as `goal_ref: exploratory`. Item is appended but won't appear in default Recommend output until promoted. Confirms: "Filed 'Victory sound on item done' as exploratory under UI Components."
+
+---
+
 ## Example: Populated `principles.md` (single-scope visual editor app)
 
 This is a worked example of what a finished `.tenbo/principles.md` looks like for a single-scope project (visual editor for designing a design system, eight layers including Visual Canvas, AI Assistant, Tokens & Themes). It calibrates the expected voice, density, and section-by-section content. Adapt — don't copy verbatim.

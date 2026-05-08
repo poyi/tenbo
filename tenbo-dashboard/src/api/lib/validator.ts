@@ -277,6 +277,52 @@ export function validate(state: TenboState): ValidateResult {
         }
       }
 
+      // Goal-ref shape validation (sk-025). Optional field; warn (do not error)
+      // when missing or malformed. Shape-check only — does NOT cross-reference
+      // against `overview.md` Product goals (deferred per sk-022 risks).
+      // Skip the missing-warning for done/dropped items: no value in nagging
+      // about completed work.
+      if (item.goal_ref === undefined) {
+        if (item.status !== 'done' && item.status !== 'dropped') {
+          warnings.push({
+            level: 'warning',
+            message: `item ${item.id} has no goal_ref — backfill with cited goals or "exploratory"`,
+            scope: scope.id,
+            itemId: item.id,
+          });
+        }
+      } else if (item.goal_ref === 'exploratory') {
+        // Valid literal — no warning.
+      } else if (Array.isArray(item.goal_ref)) {
+        if (item.goal_ref.length === 0) {
+          warnings.push({
+            level: 'warning',
+            message: `item ${item.id}.goal_ref is an empty array — use "exploratory" if no goals identified, or remove the field`,
+            scope: scope.id,
+            itemId: item.id,
+          });
+        } else {
+          for (const ref of item.goal_ref) {
+            if (typeof ref !== 'string') {
+              warnings.push({
+                level: 'warning',
+                message: `item ${item.id}.goal_ref must be a string array or the literal "exploratory" — got: ${typeof ref} entry`,
+                scope: scope.id,
+                itemId: item.id,
+              });
+              break;
+            }
+          }
+        }
+      } else {
+        warnings.push({
+          level: 'warning',
+          message: `item ${item.id}.goal_ref must be a string array or the literal "exploratory" — got: ${typeof item.goal_ref}`,
+          scope: scope.id,
+          itemId: item.id,
+        });
+      }
+
       // Phase schema validation (Phase 3 of x-001).
       if (item.phases !== undefined) {
         if (!Array.isArray(item.phases)) {

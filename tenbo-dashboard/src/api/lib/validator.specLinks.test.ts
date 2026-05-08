@@ -28,7 +28,11 @@ const baseItem = (over: Partial<Item> = {}): Item => ({
 });
 
 const warnMsgsFor = (state: TenboState, id: string) =>
-  validate(state).warnings.filter((w) => w.itemId === id).map((w) => w.message);
+  validate(state).warnings
+    .filter((w) => w.itemId === id)
+    .map((w) => w.message)
+    // Exclude goal_ref warnings (sk-025) — orthogonal to spec-link tests.
+    .filter((m) => !m.includes('goal_ref'));
 
 describe('validator — spec links (Phase 6)', () => {
   it('warns when a .tenbo/specs/ link points to a missing file', () => {

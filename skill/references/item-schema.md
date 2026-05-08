@@ -15,6 +15,7 @@ Optional fields items in `roadmap.yaml` may carry:
 - `risks:` — known unknowns or complicating factors.
 - `priority:` — `p0` (critical) / `p1` (high) / `p2` (normal) / `p3` (low). Advisory only — does not affect ordering.
 - `type:` — `feature` / `bug` / `refactor` / `spike`.
+- `goal_ref:` — array of goal IDs from `overview.md` (`[g1]`, `[g2, g3]`) OR the literal string `exploratory`. Default cardinality is **single primary** — one entry the rationale is anchored to. Use a multi-entry list only for genuinely cross-cutting items. Children may diverge from their parent's `goal_ref` if they advance a different goal — surface the divergence to the user at plan time. `exploratory` is the deliberate escape hatch for items captured without a clear goal connection; they're excluded from default Recommend output but visible in the dashboard. Missing entirely → validator warning (not error) — backwards-compatible.
 - `workpad:` — repo-relative path to a workpad file (e.g., `.tenbo/workpads/ed-045.md`). Created for substantial items at plan-path triage. See `workpad-protocol.md`.
 - `dispatch_attempts:` — integer, incremented when an item enters `rework` after a prior attempt failed. Validator surfaces items with `dispatch_attempts >= 3` to flag chronic difficulty. Items with status `rework` are mid-reset; the workpad has been archived and a fresh one created. See SKILL.md "Rework path".
 - `bar_override:` — string reason set when the user explicitly bypasses the completion bar. Validator surfaces overridden items in health checks. See `completion-bar.md`.

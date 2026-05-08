@@ -55,6 +55,15 @@ export interface Item {
   risks?: string[];
   type?: 'feature' | 'bug' | 'refactor' | 'spike';
   priority?: Priority;
+  /**
+   * Goals this item advances. Either a list of goal IDs (e.g. ["g1", "g3"])
+   * matching IDs declared in `overview.md` Product goals section, or the
+   * literal string "exploratory" for items captured without a clear goal
+   * connection. Items lacking goal_ref entirely produce a validator warning
+   * (not an error) — they're surfaced for backfill but don't block anything.
+   * See sk-022 for context.
+   */
+  goal_ref?: string[] | 'exploratory';
   /** Optional multi-phase progress. When present, item-level `status` is derived. */
   phases?: Phase[];
   /**

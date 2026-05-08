@@ -38,6 +38,10 @@ These rules govern every response and override all per-domain defaults:
    `workspace.yaml`), make reconciliation summaries slightly more verbose so new
    users see that tenbo is working: "Updated project map for 2 areas after your
    changes." After 5 sessions, revert to silent/one-liner mode.
+6. **Goals + per-layer optimizing-for prime decisions.** Read product goals
+   (`overview.md`) and the relevant layer's optimizing-for (`intent.md`) at session
+   start. Architecture choices and intake decisions reference them directly.
+   Context is direction, not just state.
 
 ## What You Can Say
 
@@ -136,6 +140,9 @@ Run once at the start of any session. Branches on `.tenbo/` presence.
    against current files. Surface only if drift found: "Heads up: N files
    changed since last session — want me to update the project map?"
    If no hash file, skip silently.
+6. **Goals migration.** If `overview.md` lacks a `## Product goals` section,
+   offer once per session per `references/init.md` → "Migration: existing
+   projects missing product goals." Decline → set a session flag, drop.
 
 Read once per session. Skip when answering a single narrow question.
 
@@ -173,19 +180,37 @@ single source of truth for setup behavior — when in doubt, read it before acti
 2. Classify per `references/classification-heuristics.md`: single-layer, cross-layer
    (uses `affects:`), or cross-scope (`.tenbo/roadmap.yaml`, prefix `x-NNN`).
    Single match → use it. Multiple → confidence policy. No match → propose new layer (ask first).
-3. Generate item: `id` (`<prefix>-NNN`), `title` (≤60 chars), `layer`, `status` (`later`
+3. **Goal alignment.** Read product goals AND `## Non-goals` from `overview.md`
+   (already in session context). **First check non-goals**: if the item conflicts
+   with a non-goal, decline and quote the relevant entry — do not file as
+   exploratory. Otherwise identify which goal(s) the item advances; phrase the
+   connection in one short clause. If no goal cleanly aligns, ask: "This doesn't
+   obviously advance g1/g2/g3. What's the angle, or should I file as exploratory?"
+   Mark `goal_ref: exploratory` if user defers; otherwise capture cited goal(s) +
+   rationale. Applies to both passive captures and explicit captures.
+   **Fallback** — if `overview.md` has no `## Product goals` section yet, offer the
+   migration prompt per `references/init.md` (skip if user already declined this
+   session). If declined, capture without `goal_ref` and add a `notes:` line:
+   "goals deferred — backfill after migration accepted." Items captured this way
+   still go through the rest of capture (classify, generate, validate).
+4. Generate item: `id` (`<prefix>-NNN`), `title` (≤60 chars), `layer`, `status` (`later`
    unless implied), `description` (one plain-English sentence). Set `priority` only when
    phrasing implies urgency.
-4. Enrich proactively if obvious `files_to_read`/`done_when` surface. Otherwise offer:
+5. Enrich proactively if obvious `files_to_read`/`done_when` surface. Otherwise offer:
    "Want me to add acceptance criteria and risk notes?"
-5. Principle check. Surface violations with exact rule quoted.
-6. Append to `roadmap.yaml`. Confirm in one sentence. Validate.
+6. Principle check. Surface violations with exact rule quoted.
+7. Append to `roadmap.yaml`. Confirm in one sentence. Validate.
 
 #### Recommend path
 
 Read all `roadmap.yaml` files. Synthesize 2–4 recommendations as a short paragraph
 considering: `now` items, recently-unblocked items (via `affects`/`spawned_from`),
 `p0`/`p1` markers, and any health signals in context. Not a queue dump.
+
+**Group by goal advanced.** Phrase each recommendation as "Working on sk-X advances
+g2 by [reason]" rather than a bare list. Items with `goal_ref: exploratory` (or no
+`goal_ref`) are excluded from default Recommend output — they remain visible in the
+dashboard but aren't surfaced as "what to work on next."
 
 **Stale check.** For each `now` item, compare its workpad `last_updated` (or its most
 recent `notes:` timestamp if no workpad) against `stale_now_days` from `principles.md`
@@ -339,17 +364,32 @@ deps, narrative drift, glossary gaps, recomputed metrics. Same diff format, labe
 1. Resolve target. Load layer constraints, `metrics.json`, open+done items (dedupe),
    and any active records under `.tenbo/decisions/` (skip files with `status: superseded`).
 2. Read source: walk layer globs, sample entry points, skim files >300 lines. Cap ~30 files.
+   **Invariant cross-check:** pull `## Invariants` from each layer's `intent.md`; for every
+   bullet, scan the layer's source for counter-evidence (determinism claims → grep for
+   `Date.now`, `Math.random`, `process.hrtime`; single-writer claims → direct `fs.write*`
+   outside the gateway; etc.). Surface mismatches as `[stale]` candidates in step 3.
 3. Generate candidates — every one must cite a specific rule:
    `[invariant]` `[anti-resp]` `[principle]` `[boundary]` `[refactor]` `[threshold]` `[gap]` `[stale]`
+   Each candidate's provenance line appends a goal-ref clause after the `[tag]:`,
+   e.g. `[anti-resp] X violated → addresses g2 by sealing coupling between layers`.
+   Keep the clause to a few words. If no goal cleanly applies, use
+   `→ no clear goal advanced (review with user)` — same exploratory escape hatch as
+   Capture; surface to the user at triage rather than forcing a classification.
    Missing tenbo docs are NOT candidates — route to populate path.
-   **Two-adapters rule (`[boundary]` only, runs first):** count concrete adapters/implementations
-   exercising the proposed seam *today*. ≥2 → keep. 1 → demote to a one-line observation
-   (hypothetical seam, not a roadmap item). 0 → drop (pure speculation). Apply before the
-   deletion test below.
-   **Deletion test (final filter):** for each candidate, imagine deleting the module/layer it
+   **Two-adapters rule (new-seam `[boundary]` candidates only, runs first):** applies when
+   a candidate *proposes* a new seam ("extract an adapter for X"). Count concrete
+   adapters/implementations exercising the proposed seam *today*. ≥2 → keep. 1 → demote to
+   a one-line observation (hypothetical seam, not a roadmap item). 0 → drop (pure
+   speculation). Skip for `[boundary]` candidates flagging *violations of existing*
+   layer boundaries (those don't have "adapters" to count) — surface those directly.
+   **Deletion test (final filter, friction tags only — `[refactor]`, `[boundary]`,
+   `[threshold]`, `[gap]`):** for each candidate, imagine deleting the module/layer it
    targets. If complexity vanishes, it was a pass-through — drop the candidate. If complexity
    reappears across 2+ callers, the friction is real — keep it, and note the outcome on the
-   surfaced item (e.g., "deletion-test: complexity reappears in 3 callers").
+   surfaced item (e.g., "deletion-test: complexity reappears in 3 callers"). **Skip for
+   rule-violation tags** (`[invariant]`, `[anti-resp]`, `[principle]`, `[stale]`): these are
+   violations regardless of caller count; surface them and let the user decide whether to
+   delete the offending code or re-justify it.
    **Decisions filter:** suppress any candidate matching an active record in
    `.tenbo/decisions/`; surface as a one-line observation `previously declined — see decisions/<file>`.
 4. De-duplicate. Present triage list. Wait for picks. When the user rejects a candidate

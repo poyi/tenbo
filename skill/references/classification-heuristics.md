@@ -62,13 +62,15 @@ Cross-scope items live in `.tenbo/roadmap.yaml` (workspace scope), use the `x-NN
 
 ## Audit `[boundary]` candidates: the two-adapters rule
 
-A `[boundary]` candidate proposes a seam — a split, a new interface, an ownership change. Before surfacing one, count the concrete adapters/implementations that exercise the proposed seam *today* (not hypothetical future ones):
+The two-adapters rule applies *only* to candidates that *propose a new seam* — a split, a new interface, an ownership change. Count the concrete adapters/implementations that would exercise the proposed seam *today* (not hypothetical future ones):
 
 - **≥2 adapters → keep.** Something actually varies across the seam; the abstraction earns its keep.
 - **1 adapter → demote to observation.** One implementation is a hypothetical seam, not a real one. Surface as a one-line note ("only one caller varies here today; revisit if a second appears"), not a roadmap item.
 - **0 adapters → drop.** Pure speculation. No surface.
 
-This filter runs *before* the universal deletion test in the Audit subroutine and is scoped to `[boundary]` candidates only — other candidate types skip it.
+**Skip this rule for `[boundary]` candidates flagging *violations of existing layer boundaries*** (e.g., a data-layer file importing from UI). Those don't have "adapters" to count — surface them directly. The rule is for new-seam proposals, not for existing-boundary breaches.
+
+This filter runs *before* the deletion test in the Audit subroutine.
 
 ## Anti-patterns
 
