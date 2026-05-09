@@ -1,3 +1,5 @@
+<!-- auto-generated — do not edit; hand-edits will be lost on regen.
+     Route changes through source files (overview.md, decisions/, roadmap.yaml, etc.). -->
 # Tenbo Agent Context (auto-generated — do not edit)
 
 Generated: {{timestamp}}
@@ -32,6 +34,38 @@ No layers with recent activity.
 {{#entry_points}}
 - {{file}} ({{layer}})
 {{/entry_points}}
+
+## Active decisions
+{{#active_decisions}}
+- {{title}} ({{date}})
+{{/active_decisions}}
+{{^active_decisions}}
+No active decisions.
+{{/active_decisions}}
+
+## Do not
+{{#do_not_items}}
+- {{title_of_thing_not_to_do}} — see decisions/{{file}} or item {{id}}
+{{/do_not_items}}
+{{^do_not_items}}
+No active 'do not' entries.
+{{/do_not_items}}
+
+## Architectural reads
+{{#architectural_reads}}
+- {{path}} — {{why}}
+{{/architectural_reads}}
+{{^architectural_reads}}
+No active layers — overview.md only.
+{{/architectural_reads}}
+
+## Recently shipped
+{{#recently_shipped}}
+- {{id}}: {{title}} ({{date}})
+{{/recently_shipped}}
+{{^recently_shipped}}
+No recently shipped items.
+{{/recently_shipped}}
 
 ## Health
 Pending reconciliation: {{pending_count}}

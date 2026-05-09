@@ -109,6 +109,10 @@ already run by the session gate). Use repo size to choose the init path.
     - [ ] `npx tenbo-dashboard sync` exits 0.
     - [ ] Bridge message includes the inline health summary (step 11b).
 13. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
+    *Load-bearing: this is the Tier-0 priming surface every session reads at start.
+    Canonical-derived — regenerated automatically at session-end boundaries
+    (Completion-and-Sync, Batch Execute, explicit checkpoint). Do not hand-edit;
+    route changes through source files (overview.md, decisions/, etc.).*
 14. **Post-init usage hints.** Print 3–5 example prompts tailored to maturity:
     - **early**: "Try: 'this code is getting messy', 'refresh tenbo', 'what's risky?',
       'fill in architecture for [layer]'"
@@ -137,6 +141,8 @@ and use a conversation-driven approach:
 10. **Validate + bridge.** Run validator, then: "Here's what I'd tackle first. Want to
     start on one?"
 11. **Generate agent-context.md.** Render `.tenbo/agent-context.md` from template.
+    *Load-bearing & canonical-derived: regenerated at session-end boundaries; do not
+    hand-edit — route changes through source files.*
 12. **Post-init usage hints.** Print:
     "Try: 'what should I build next?', 'track this idea', 'what does this project do?'"
 

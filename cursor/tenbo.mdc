@@ -123,9 +123,12 @@ Run once at the start of any session. Branches on `.tenbo/` presence.
 
 ### If `.tenbo/` is present
 
-1. Read `.tenbo/agent-context.md` (Tier 0 context). If absent, fall back to reading
-   `workspace.yaml` + all `roadmap.yaml` + `.validation-status.json` and regenerate
-   `agent-context.md` for next session.
+1. Read `.tenbo/agent-context.md` (Tier 0 context — load-bearing; regenerated at
+   session-end boundaries). If absent (first-encounter recovery only, not steady
+   state), fall back to reading `workspace.yaml` + all `roadmap.yaml` +
+   `.validation-status.json` and regenerate `agent-context.md` so next session primes
+   cleanly. **Explicit-checkpoint trigger:** if the user says "checkpoint",
+   "wrap up the session", or similar, regenerate `agent-context.md` immediately.
 2. Bump `tenbo_sessions` in `workspace.yaml`.
 3. **Session briefing.** Produce a 2–4 line briefing if anything noteworthy:
    - Count and titles of `now` items, with days-active.
@@ -144,6 +147,12 @@ Run once at the start of any session. Branches on `.tenbo/` presence.
 6. **Goals migration.** If `overview.md` lacks a `## Product goals` section,
    offer once per session per `tenbo-init.mdc` → "Migration: existing
    projects missing product goals." Decline → set a session flag, drop.
+7. **Retroactive done_when sweep.** Pass over `next` + `later` items with cheap
+   heuristics (≤2s budget): any recently-done item's id/title keywords appear
+   in this item's `done_when` bullets? If candidates exist, surface one line —
+   *"N next/later items look like they may be effectively done given recent
+   work — want me to walk through them?"* On yes, walk one-by-one (confirm-
+   before-flip). If none, stay silent.
 
 Read once per session. Skip when answering a single narrow question.
 

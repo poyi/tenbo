@@ -147,6 +147,10 @@ fresh state.
 
 ## Completion summary
 
+**Regenerate agent-context.md (sk-030).** After all items in the batch have run
+their completion ceremonies, regenerate `.tenbo/agent-context.md` once for the
+batch (not per item). Hash-compare before write.
+
 After all items processed, run a final `npx tenbo-dashboard sync` for
 the full workspace, then:
 

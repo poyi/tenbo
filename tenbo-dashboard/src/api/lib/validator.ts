@@ -30,6 +30,39 @@ export function validate(state: TenboState): ValidateResult {
   }
   for (const item of state.crossCuttingRoadmap ?? []) allItemIds.add(item.id);
 
+  // Duplicate-ID detection (sk-031). Walks active + archived + cross-cutting
+  // items, recording every (id → location) occurrence. An ID appearing more
+  // than once anywhere in the workspace is a hard data-integrity error: it
+  // breaks relationship validation, history (active vs archive), and item
+  // identity. Emits one error per duplicated ID listing all locations.
+  const idOccurrences = new Map<string, string[]>();
+  const recordOccurrence = (id: string, where: string) => {
+    if (!id || typeof id !== 'string') return;
+    const arr = idOccurrences.get(id) ?? [];
+    arr.push(where);
+    idOccurrences.set(id, arr);
+  };
+  for (const scope of state.scopes) {
+    for (const item of scope.items) {
+      recordOccurrence(item.id, `scopes/${scope.id}/roadmap.yaml (active)`);
+    }
+    for (const item of scope.archivedItems ?? []) {
+      recordOccurrence(item.id, `scopes/${scope.id}/roadmap-archive.yaml`);
+    }
+  }
+  for (const item of state.crossCuttingRoadmap ?? []) {
+    recordOccurrence(item.id, `.tenbo/roadmap.yaml (cross-cutting)`);
+  }
+  for (const [id, locs] of idOccurrences) {
+    if (locs.length > 1) {
+      errors.push({
+        level: 'error',
+        message: `duplicate item id "${id}" — appears in ${locs.join(' and ')}`,
+        itemId: id,
+      });
+    }
+  }
+
   const validateSupersededBy = (item: Item, scopeId?: string) => {
     if (item.superseded_by === undefined) return;
     const sb = item.superseded_by;
@@ -191,16 +224,12 @@ export function validate(state: TenboState): ValidateResult {
       }
     }
 
-    // Item rules
-    const seenIds = new Set<string>();
+    // Item rules. Note: cross-scope/active+archive duplicate-id detection runs
+    // once at the top of validate() (sk-031) — no per-scope seenIds needed.
     for (const item of scope.items) {
       if (!/^[a-z]{1,5}-\d{3,}$/.test(item.id)) {
         errors.push({ level: 'error', message: `item "${item.id}" has invalid id format (expected <prefix>-NNN, e.g. ed-001 or x-001)`, scope: scope.id, itemId: item.id });
       }
-      if (seenIds.has(item.id)) {
-        errors.push({ level: 'error', message: `duplicate item id "${item.id}"`, scope: scope.id, itemId: item.id });
-      }
-      seenIds.add(item.id);
       // Status is optional when phases are present (it's derived via roll-up).
       // Only validate when explicitly set.
       const hasPhases = Array.isArray(item.phases) && item.phases.length > 0;

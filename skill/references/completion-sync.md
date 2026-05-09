@@ -61,14 +61,26 @@ summary. Judgment calls use the universal prompting rule.
    spawned_from > related). Format: *"Closing [id] — looks like [N] item(s)
    reference this. Mark each (a) done, (b) dropped, or (c) leave as-is?"*
    On user response, apply per-item. Skip silently if no candidates surface.
-11. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
+   **Done_when satisfaction scan (sk-031).** In the same pass, also scan open
+   `now`/`next`/`later` items' `done_when` bullets — does any item M's bullets
+   look evidently satisfied by item N's work or by current code state? Heuristics
+   cheap-first: (1) M's done_when mentions N's id or title keywords, (2) same
+   layer + overlapping description keywords, (3) (optional) free-text similarity.
+   Coalesce with the relationship sweep into one consolidated candidate list,
+   capped at 3 total. Format: *"ed-186 looks satisfied by ed-193 — bullets X, Y, Z
+   appear complete. Mark done?"* If 3+ match, surface "3 of N — review the rest
+   separately?" Confirm-before-flip — never auto-mark.
+11. **Regenerate agent-context.md (sk-030).** After the sweep + status flips, regenerate
+    `.tenbo/agent-context.md` from the template. Hash-compare new content vs existing —
+    if identical, skip the write. Idempotent.
+12. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
     plain `sync` if changes spanned multiple scopes). This recomputes metrics,
     re-runs init-check, re-validates, AND surfaces any NEW critical/warning findings
     inline — in one command. Without this, the dashboard's Health page (and the
     next session's briefing) will show stale data. Cheap — do not skip.
-12. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
+13. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
     through verbatim as a one-liner to the user. At most once per session.
-13. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
+14. **Summarize.** One sentence: "Save system marked complete. Housing is now unblocked."
 
 ## Rework path
 
