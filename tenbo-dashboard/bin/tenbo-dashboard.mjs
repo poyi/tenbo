@@ -40,6 +40,7 @@ const commands = {
   'init-check': 'scripts/init-check.ts',
   sync: 'scripts/sync.ts',
   archive: 'scripts/archive.ts',
+  hook: 'scripts/hook.ts',
 };
 
 // Documented aliases for the bare-launch behavior. Users (and agents) reading
@@ -82,6 +83,9 @@ Usage:
   tenbo-dashboard metrics --all    Compute scope metrics
   tenbo-dashboard archive          Move old done/dropped items to roadmap-archive.yaml
                                    [--scope <id>] [--days 30] [--max 20]
+  tenbo-dashboard hook install     Install opt-in pre-commit validation hook
+                                   [--dry-run] [--force]
+  tenbo-dashboard hook uninstall   Remove the tenbo pre-commit hook (idempotent)
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
 

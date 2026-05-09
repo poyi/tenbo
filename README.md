@@ -203,6 +203,17 @@ npx tenbo-dashboard next-id <prefix>  # Allocate next roadmap item ID
 npx tenbo-dashboard --version         # Print the installed version
 ```
 
+### Opt-in: stricter local validation
+
+A pre-commit hook that runs the deterministic validator on `.tenbo/` before every commit. Catches duplicate IDs, broken refs, and schema violations before they enter history. Pure JavaScript, sub-second, no LLM calls.
+
+```bash
+npx tenbo-dashboard hook install      # See exactly what would change first: --dry-run
+npx tenbo-dashboard hook uninstall    # Idempotent and surgical
+```
+
+Errors block the commit; warnings print but don't block. Existing `.git/hooks/pre-commit` (or `.husky/pre-commit`) is preserved — tenbo chains rather than clobbers. Bypass per-commit with `git commit --no-verify`.
+
 ## How it works
 
 tenbo maintains a `.tenbo/` directory in your repo:

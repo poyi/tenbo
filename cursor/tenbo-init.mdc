@@ -123,6 +123,11 @@ already run by the session gate). Use repo size to choose the init path.
     - **early**: "Try: 'this code is getting messy', 'refresh tenbo', 'what's risky?',
       'fill in architecture for [layer]'"
     Show once after init, never repeat.
+15. **Offer pre-commit hook (sk-032).** Ask once: *"Optional: install a pre-commit
+    hook that runs validation on `.tenbo/` before each commit? Catches duplicate IDs,
+    broken refs, schema violations before they enter history. Sub-second runtime,
+    opt-out anytime via `npx tenbo-dashboard hook uninstall` or `git commit --no-verify`
+    per commit."* Accept → run `npx tenbo-dashboard hook install`. Decline → drop, no nag.
 
 ## Intent-first init path (repo is empty or scaffold: size < `small`)
 
@@ -151,6 +156,10 @@ and use a conversation-driven approach:
     hand-edit — route changes through source files.*
 12. **Post-init usage hints.** Print:
     "Try: 'what should I build next?', 'track this idea', 'what does this project do?'"
+13. **Offer pre-commit hook (sk-032).** Ask once: *"Optional: install a pre-commit
+    hook that runs validation on `.tenbo/` before each commit? Sub-second, opt-out anytime
+    via `npx tenbo-dashboard hook uninstall` or `git commit --no-verify` per commit."*
+    Accept → run `npx tenbo-dashboard hook install`. Decline → drop, no nag.
 
 ## Cross-cutting roadmap
 

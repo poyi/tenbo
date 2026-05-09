@@ -50,6 +50,13 @@ export function computeDiff(prev: Snapshot | null, current: Snapshot): DiffResul
 export interface RenderOptions {
   verbose?: boolean;
   json?: boolean;
+  /**
+   * Strict mode (sk-032): reserved for future stricter behavior. Today the
+   * default already exits non-zero on errors and 0 on warnings, so --strict
+   * is a no-op semantically but a stable contract for the pre-commit hook.
+   * If we ever introduce a warning-blocks-commit mode it lands here.
+   */
+  strict?: boolean;
 }
 
 export interface RenderResult {
@@ -152,6 +159,7 @@ if (isMain()) {
   const args = process.argv.slice(2);
   const verbose = args.includes('--verbose');
   const json = args.includes('--json');
+  const strict = args.includes('--strict');
 
   const cwd = process.cwd();
   const repoRoot = findRepoRoot(cwd) ?? path.resolve(cwd, '..', '..');
@@ -169,7 +177,7 @@ if (isMain()) {
   fs.writeFileSync(statusPath, JSON.stringify(snapshot, null, 2) + '\n');
 
   const diff = computeDiff(prev, snapshot);
-  const rendered = renderOutput(snapshot, diff, { verbose, json });
+  const rendered = renderOutput(snapshot, diff, { verbose, json, strict });
   if (rendered.stdout) process.stdout.write(rendered.stdout);
   if (rendered.stderr) process.stderr.write(rendered.stderr);
   if (!json && !verbose) {
