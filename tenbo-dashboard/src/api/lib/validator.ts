@@ -323,6 +323,45 @@ export function validate(state: TenboState): ValidateResult {
         });
       }
 
+      // Pre-flight violations (sk-029). Optional field; surface as a health
+      // observation (warning) when an item carries any accept-with-violation
+      // entry. Skip done/dropped items — no value nagging completed work.
+      // Shape-check only: validate array shape and enum values; don't
+      // cross-validate `check` strings against any taxonomy.
+      if (item.preflight_violations !== undefined) {
+        if (!Array.isArray(item.preflight_violations)) {
+          errors.push({ level: 'error', message: `item "${item.id}" preflight_violations must be a list`, scope: scope.id, itemId: item.id });
+        } else {
+          const VALID_OUTCOMES = new Set(['violation', 'threshold-cross', 'dependency-direction']);
+          const VALID_DECISIONS = new Set(['accept-with-violation', 'scope-adjusted', 'deferred']);
+          let acceptedCount = 0;
+          for (const entry of item.preflight_violations) {
+            if (!entry || typeof entry !== 'object') {
+              errors.push({ level: 'error', message: `item "${item.id}" preflight_violations entry is not an object`, scope: scope.id, itemId: item.id });
+              continue;
+            }
+            if (typeof (entry as any).check !== 'string' || (entry as any).check.trim() === '') {
+              errors.push({ level: 'error', message: `item "${item.id}" preflight_violations entry missing string "check"`, scope: scope.id, itemId: item.id });
+            }
+            if (!VALID_OUTCOMES.has((entry as any).outcome)) {
+              errors.push({ level: 'error', message: `item "${item.id}" preflight_violations entry has invalid outcome "${(entry as any).outcome}"`, scope: scope.id, itemId: item.id });
+            }
+            if (!VALID_DECISIONS.has((entry as any).decision)) {
+              errors.push({ level: 'error', message: `item "${item.id}" preflight_violations entry has invalid decision "${(entry as any).decision}"`, scope: scope.id, itemId: item.id });
+            }
+            if ((entry as any).decision === 'accept-with-violation') acceptedCount++;
+          }
+          if (acceptedCount > 0 && item.status !== 'done' && item.status !== 'dropped') {
+            warnings.push({
+              level: 'warning',
+              message: `item ${item.id} has accepted ${acceptedCount} pre-flight violation(s) — review at next audit`,
+              scope: scope.id,
+              itemId: item.id,
+            });
+          }
+        }
+      }
+
       // Phase schema validation (Phase 3 of x-001).
       if (item.phases !== undefined) {
         if (!Array.isArray(item.phases)) {

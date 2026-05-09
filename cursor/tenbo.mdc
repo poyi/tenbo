@@ -212,7 +212,13 @@ single source of truth for setup behavior — when in doubt, read it before acti
    phrasing implies urgency.
 5. Enrich proactively if obvious `files_to_read`/`done_when` surface. Otherwise offer:
    "Want me to add acceptance criteria and risk notes?"
-6. Principle check. Surface violations with exact rule quoted.
+6. **Drift pre-flight.** Load the affected layer's `intent.md` (Anti-responsibilities,
+   Invariants, Boundaries, Optimizing-for) and `principles.md` cross-cutting rules; check
+   the proposed item against them. If a check trips, surface the *single most relevant*
+   violation as decision input, not a block: *"Heads up — this proposes [behavior] which
+   violates [layer]'s [rule kind]: '[exact quote]'. Adjust scope, or capture with the
+   violation flagged?"* On "capture with violation", record `preflight_violations:
+   [{check, outcome: violation, decision: accept-with-violation, rationale}]`. Aligned items pass through silently.
 7. Append to `roadmap.yaml`. Confirm in one sentence. Validate.
 
 #### Recommend path
@@ -240,6 +246,11 @@ with no progress — keep working, demote to `next`, or split?"
    child items each with `done_when`; confirm before appending. **Spec-file fallback**
    (spike, design decision, atomic migration) → create `.tenbo/specs/<item-id>-<slug>.md`
    with `tenbo_item:` frontmatter + TL;DR section (max 4 sentences); append to `links:`.
+   **Impact projection (substantial only):** estimate LOC delta, new file count, and new
+   item count for each affected layer; compare against `principles.md` thresholds (defaults
+   ≥250 LOC added, ≥10 active items per layer). If projected to cross, surface as input —
+   *"Completing this would push [layer] from N to ~M (threshold T). Worth landing part in
+   a sibling layer?"* User picks scope-adjust / plan-as-is / split; record in `notes:`.
 
    **Phases vs child items:** when proposing the breakdown, apply the rule from
    `tenbo-batch-execute.mdc` → "Granularity": phases share files/state/ordering,

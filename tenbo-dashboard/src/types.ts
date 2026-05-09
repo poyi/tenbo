@@ -93,6 +93,18 @@ export interface Item {
    * refactor, bug} lacks this field.
    */
   doc_update?: string;
+  /**
+   * Pre-flight violations recorded at capture time when the user accepted an
+   * item despite a flagged violation. Each entry: which check fired, what the
+   * outcome was, what the user decided, and their rationale. Empty / undefined
+   * when item passed pre-flight cleanly. See sk-029.
+   */
+  preflight_violations?: Array<{
+    check: string;            // e.g. "ui-components anti-responsibility: no direct fs writes"
+    outcome: 'violation' | 'threshold-cross' | 'dependency-direction';
+    decision: 'accept-with-violation' | 'scope-adjusted' | 'deferred';
+    rationale?: string;
+  }>;
 }
 
 export interface Layer {

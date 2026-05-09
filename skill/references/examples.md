@@ -175,6 +175,40 @@ The user sees one `[boundary]` item in triage, plus the observation in the audit
 
 ---
 
+## Example 12: Capture path drift pre-flight (both branches)
+
+**User:** "Add a feature where the UI Components layer writes a CSV export directly to disk when the user clicks a button."
+
+**Skill:**
+1. Classifies under the dashboard's UI Components layer (single match, high confidence).
+2. Goal alignment: maps to g1.
+3. Drift pre-flight: loads `intent.md` for UI Components. Finds anti-responsibility: *"UI Components must not perform direct filesystem writes — all persistence routes through the API layer."*
+4. Surfaces: "Heads up — this proposes a UI component writing CSVs directly to disk, which violates UI Components' anti-responsibility: 'UI Components must not perform direct filesystem writes — all persistence routes through the API layer.' Adjust scope, or capture with the violation flagged?"
+
+**Branch A — user adjusts:**
+
+**User:** "Right, route it through the API. Let the UI just hit a download endpoint."
+
+**Skill:** Re-runs pre-flight against the revised scope. No checks trip. Captures `ui-053` cleanly with no `preflight_violations` field. Confirms: "Added 'CSV export via API download endpoint' to UI Components as ui-053."
+
+**Branch B — user accepts with violation:**
+
+**User:** "I know — this is a one-off debug helper that we'll rip out before launch. File it with the violation flagged."
+
+**Skill:** Captures `ui-053` with:
+
+```yaml
+preflight_violations:
+  - check: "ui-components anti-responsibility: no direct fs writes"
+    outcome: violation
+    decision: accept-with-violation
+    rationale: "one-off debug helper, scheduled for removal pre-launch"
+```
+
+Confirms: "Added 'Direct CSV export (debug)' to UI Components as ui-053 with one accepted pre-flight violation — validator will surface it for audit review until done or dropped."
+
+---
+
 ## Example: Populated `principles.md` (single-scope visual editor app)
 
 This is a worked example of what a finished `.tenbo/principles.md` looks like for a single-scope project (visual editor for designing a design system, eight layers including Visual Canvas, AI Assistant, Tokens & Themes). It calibrates the expected voice, density, and section-by-section content. Adapt — don't copy verbatim.
