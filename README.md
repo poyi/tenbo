@@ -18,7 +18,7 @@ After a few weeks of vibe coding, you have working software and zero navigabilit
 
 ## How tenbo helps
 
-tenbo is a Claude Code skill that runs alongside your normal coding workflow. It watches what you build, maintains a structured map of your project, and keeps a living roadmap — all without you having to learn any commands or schemas.
+tenbo is an AI coding assistant skill / rule package that runs alongside your normal coding workflow. It watches what you build, maintains a structured map of your project, and keeps a living roadmap — all without you having to learn any commands or schemas.
 
 - **Persistent memory across sessions.** Architecture decisions, roadmap items, and project context survive between conversations. Your AI assistant starts every session knowing where you left off.
 - **Automatic structure maintenance.** As you code, tenbo silently updates architecture docs, dependency maps, and code maps. Drift is caught early, not after it's too late.
@@ -28,19 +28,19 @@ tenbo is a Claude Code skill that runs alongside your normal coding workflow. It
 
 ## What's in this repo
 
-- **`skill/`** — The Claude Code skill (SKILL.md + references + templates).
+- **`skill/`** — The Claude Code and Codex skill (SKILL.md + references + templates).
 - **`cursor/`** — The Cursor rule package (multiple flat `.mdc` files, mirroring the skill). Same content, Cursor-native frontmatter.
-- **`tenbo-dashboard/`** — An optional local web dashboard for visual roadmap browsing, item triage, and drag-reorder. Published to npm as `tenbo-dashboard`. Editor-agnostic — works for both Claude Code and Cursor users.
+- **`tenbo-dashboard/`** — An optional local web dashboard for visual roadmap browsing, item triage, and drag-reorder. Published to npm as `tenbo-dashboard`. Editor-agnostic — works for Claude Code, Cursor, and Codex users.
 
 ## Install
 
-One line — detects which editor(s) you have installed (Claude Code, Cursor) and installs tenbo for each, plus the optional `tenbo-dashboard` companion. Safe to re-run as an updater.
+One line — detects which editor(s) you have installed (Claude Code, Cursor, Codex) and installs tenbo for each, plus the optional `tenbo-dashboard` companion. Safe to re-run as an updater.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/poyi/tenbo/main/install.sh | bash
 ```
 
-Same `.tenbo/` data on disk works for both editors — a project set up in one is portable to the other.
+Same `.tenbo/` data on disk works for every supported editor — a project set up in one is portable to the others.
 
 > **What does it do?** Run `--dry-run` first if you want to see exactly what changes:
 > ```bash
@@ -49,7 +49,7 @@ Same `.tenbo/` data on disk works for both editors — a project set up in one i
 >
 > Other useful flags:
 > - `--list` — show the editor matrix and exit
-> - `--only cursor` (or `--only claude`) — install for one editor only
+> - `--only cursor` (or `--only claude` / `--only codex`) — install for one editor only
 > - `--minimal` — skip the npm dashboard install
 > - `--help` — full reference
 >
@@ -74,6 +74,9 @@ mkdir -p .claude/skills && cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
 # Cursor rule (only if you use Cursor)
 mkdir -p .cursor/rules && cp -r /tmp/tenbo/cursor/. .cursor/rules/
 
+# Codex skill (only if you use Codex)
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills" && cp -r /tmp/tenbo/skill/ "${CODEX_HOME:-$HOME/.codex}/skills/tenbo/"
+
 # Optional dashboard
 npm install -g tenbo-dashboard@latest
 
@@ -96,7 +99,7 @@ Cursor's Agent Requested mode loads rules based on intent inferred from the mess
 
 If you find natural-language phrases consistently miss in your Cursor setup, mention "tenbo" explicitly or `@tenbo` once at the start — both prime the rule for the rest of the session.
 
-### What happens next (both editors)
+### What happens next (all supported editors)
 
 1. The agent detects the skill / rule and offers to set up tenbo ("Want me to map the project structure?")
 2. tenbo creates a `.tenbo/` directory in your repo with architecture docs, roadmaps, and layer definitions
@@ -160,7 +163,7 @@ Use this when you want tenbo to populate a layer's `intent.md` and `code-map.md`
 
 ## Install the dashboard (optional)
 
-The dashboard is a local web UI that visualizes the same `.tenbo/` files Claude maintains. Skill and dashboard read and write the same data — edits in one show up in the other on next refresh.
+The dashboard is a local web UI that visualizes the same `.tenbo/` files your AI assistant maintains. Skill / rule package and dashboard read and write the same data — edits in one show up in the other on next refresh.
 
 ```bash
 # Run in your project directory (where .tenbo/ lives)
@@ -177,7 +180,7 @@ Three views, each solving a different problem AI-assisted projects accumulate ov
 
 ![tenbo dashboard — kanban board view](docs/images/dashboard-kanban.png)
 
-A kanban board across `now` / `next` / `later` / `done`, grouped by scope and layer. Drag to reprioritize, click to edit, see at a glance what's in flight versus blocked. The roadmap is the same one Claude reads — when you say "what should I build next?", this is what's behind the answer. Useful when planning a week, triaging a backlog dump, or showing someone else what's happening on the project without scrolling git log.
+A kanban board across `now` / `next` / `later` / `done`, grouped by scope and layer. Drag to reprioritize, click to edit, see at a glance what's in flight versus blocked. The roadmap is the same one your AI assistant reads — when you say "what should I build next?", this is what's behind the answer. Useful when planning a week, triaging a backlog dump, or showing someone else what's happening on the project without scrolling git log.
 
 #### Docs — "What does this project actually do?"
 
@@ -247,7 +250,7 @@ Updates are user-initiated. Just ask your AI assistant in any session:
 "Update tenbo"
 ```
 
-tenbo detects every install path that exists — the Claude Code skill (`.claude/skills/tenbo/`), the Cursor rule package (`.cursor/rules/tenbo*.mdc`), and the `tenbo-dashboard` npm package — and checks each against its remote. Updates happen in lockstep: if a newer skill or rule requires a newer dashboard than you have, tenbo refuses the editor-package update first and walks you through upgrading the dashboard, so the two never drift out of sync. Your project data in `.tenbo/` is never touched.
+tenbo detects every install path that exists — the Claude Code skill (`.claude/skills/tenbo/`), the Cursor rule package (`.cursor/rules/tenbo*.mdc`), the Codex skill (`${CODEX_HOME:-$HOME/.codex}/skills/tenbo/`), and the `tenbo-dashboard` npm package — and checks each against its remote. Updates happen in lockstep: if a newer skill or rule requires a newer dashboard than you have, tenbo refuses the editor-package update first and walks you through upgrading the dashboard, so the two never drift out of sync. Your project data in `.tenbo/` is never touched.
 
 Other prompts that work:
 
@@ -268,6 +271,9 @@ cp -r /tmp/tenbo/skill/ .claude/skills/tenbo/
 
 # Cursor rule (only if installed)
 cp -r /tmp/tenbo/cursor/. .cursor/rules/
+
+# Codex skill (only if installed)
+cp -r /tmp/tenbo/skill/ "${CODEX_HOME:-$HOME/.codex}/skills/tenbo/"
 
 rm -rf /tmp/tenbo
 
@@ -303,7 +309,7 @@ First launch on a cold cache takes ~10 seconds while Vite optimizes the dependen
 
 ## Requirements
 
-- **Skill / rule package**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code) or [Cursor](https://cursor.com).
+- **Skill / rule package**: Any project. Works with any language — Rust, Python, Go, TypeScript, etc. Requires [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com), or Codex.
 - **Dashboard**: Node.js 18+.
 
 ## License

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tenbo"
+  short_description: "Plan, track, and maintain project work"
+  default_prompt: "Use $tenbo to review the project, recommend the next work, and keep project memory current."
+
+policy:
+  allow_implicit_invocation: true

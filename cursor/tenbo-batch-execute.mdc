@@ -11,21 +11,29 @@ alwaysApply: false
 *Maps to: "complete all next items", "run the roadmap", "batch execute",
 "knock out the next 5 items", "work through everything".*
 
-Orchestrates multiple roadmap items by dispatching each to a Claude Code
-subagent via the `Agent` tool. The main conversation acts as a lightweight
-orchestrator — it reads the roadmap, dispatches work, validates reports, and
-tracks completion. Each subagent gets its own context window with only the
-files relevant to that item, keeping token usage efficient.
+Orchestrates multiple roadmap items by dispatching each to a worker agent. The
+main conversation acts as a lightweight orchestrator: it reads the roadmap,
+dispatches work, validates reports, and tracks completion. Each worker gets its
+own context window with only the files relevant to that item, keeping token usage
+efficient.
+
+Platform dispatch:
+
+- **Codex:** use `spawn_agent` to start worker agents and `wait_agent` to collect
+  reports. Give each worker explicit, disjoint file ownership. Workers must not
+  spawn nested subagents.
+- **Claude Code:** use the `Agent` tool. The same prompt structure and no-nesting
+  rule apply.
 
 ## Granularity: phases vs child items
 
-Batch Execute dispatches **one subagent per item**. Phased items (a single
-item with `phases: []`) run serially under one subagent — phases never
+Batch Execute dispatches **one worker per item**. Phased items (a single
+item with `phases: []`) run serially under one worker — phases never
 parallelize. The decision rule:
 
 > **If phases share files, state, or required ordering → use `phases:`.
 > If phases are independent units of work → split into child items via
-> `spawned_from:` so Batch Execute can dispatch them as separate subagents
+> `spawned_from:` so Batch Execute can dispatch them as separate workers
 > (sequentially today; parallel later if guards allow).**
 
 When in doubt: ask "could phase N and phase M run on different machines
@@ -106,12 +114,15 @@ For each item:
    (`tenbo-subroutines.mdc`) to choose first-turn or continuation brief.
 3. **Create workpad** if the item is substantial and lacks one (see
    `tenbo-workpad-protocol.mdc` → "When to create").
-4. **Build the subagent prompt.** Render the dispatch brief (first-turn or
+4. **Build the worker prompt.** Render the dispatch brief (first-turn or
    continuation template) with full item context: id, title, description,
    `done_when:`, `files_to_read:`, `risks:`, layer constraints (Tier 2),
    verification commands, doc-update requirement, completion-bar rules, and
    the 9-section structured report format.
-5. **Dispatch via `Agent` tool:**
+5. **Dispatch to the current platform's worker agent tool:**
+   - Codex: call `spawn_agent` with the rendered brief and item label, then
+     collect the report with `wait_agent`.
+   - Claude Code: call `Agent`:
    ```
    Agent(
      prompt: "<rendered dispatch brief>",
@@ -119,9 +130,9 @@ For each item:
      model: "sonnet"  // or user preference
    )
    ```
-   The subagent has access to `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`
-   — full coding capability scoped to the workspace.
-6. **Receive structured report.** The subagent returns the 9-section report
+   The worker has normal coding capability scoped to the workspace and the
+   prompt's file ownership. In Codex, make file ownership explicit and disjoint.
+6. **Receive structured report.** The worker returns the 9-section report
    (files changed, approach, AC status, verification, noticed-but-not-fixed,
    open questions, doc updates, workpad updates, completion bar per rule).
 7. **Validate.** Run the existing **"Subagent coded the work"** flow from
@@ -169,7 +180,18 @@ them manually.
 ## Parallel execution (opt-in)
 
 When the user confirms non-overlapping items can run in parallel, dispatch
-multiple subagents simultaneously using `run_in_background: true`:
+multiple workers simultaneously.
+
+Codex:
+
+```
+spawn_agent(prompt: "<brief for item A>", description: "ed-045: Add input validation")
+spawn_agent(prompt: "<brief for item B>", description: "ed-046: Refactor storage layer")
+wait_agent(...)
+wait_agent(...)
+```
+
+Claude Code:
 
 ```
 Agent(
@@ -184,8 +206,8 @@ Agent(
 )
 ```
 
-Collect results as each subagent completes. Validate each report in the
-order they finish. If a parallel subagent's changes conflict with another
+Collect results as each worker completes. Validate each report in the
+order they finish. If a parallel worker's changes conflict with another
 (detected via `git status` or overlapping files in reports), flag the
 conflict and resolve sequentially.
 
@@ -200,8 +222,8 @@ conflict and resolve sequentially.
 - **Escape hatch.** User can say "stop" at any point between items to halt
   the loop. Already-dispatched background agents continue; results are
   collected and validated when they return.
-- **No nesting.** Subagents spawned via `Agent` cannot spawn further
-  subagents (Claude Code constraint). Each subagent is a leaf executor.
+- **No nesting.** Workers cannot spawn further subagents. Each worker is a
+  leaf executor.
 - **Branch safety.** All work happens on the current branch. If the user is
   on a non-main branch, apply the existing branch-awareness warning once
   before the batch starts.

@@ -59,8 +59,8 @@ export function DecisionsTab({ state }: { state: TenboState }) {
           because Y.&rdquo; They live in <code>.tenbo/decisions/&lt;slug&gt;.md</code>.
         </p>
         <p className={styles.emptyBody}>
-          See <code>skill/templates/decision.md.tmpl</code> for the file shape
-          (frontmatter + Context / Decision / Consequences / When to revisit).
+          Create a Markdown file with frontmatter plus Context, Decision,
+          Consequences, and When to revisit sections.
         </p>
       </div>
     );

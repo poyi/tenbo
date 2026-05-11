@@ -12,7 +12,7 @@ export function usePrompt() {
     if (timerRef.current) clearTimeout(timerRef.current);
     try {
       await navigator.clipboard.writeText(text);
-      setToast(`${label} copied. Paste into Claude Code in the repo root.`);
+      setToast(`${label} copied. Paste into your coding agent in the repo root.`);
     } catch {
       setToast('Copy failed. Select and copy manually.');
     }

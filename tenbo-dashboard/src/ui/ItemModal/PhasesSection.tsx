@@ -1,4 +1,4 @@
-import type { Item, Phase, Status } from '../../types';
+import type { Item, Status } from '../../types';
 import { phaseProgress } from '../../api/lib/phases';
 
 const STATUSES: Status[] = ['now', 'next', 'later', 'done', 'dropped'];

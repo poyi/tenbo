@@ -55,7 +55,7 @@ End-to-end walkthroughs the skill can refer back to. Use the same tone and struc
 
 ## Example 5: Task DoD update
 
-**User:** (After Claude Code finishes implementing rm-001) "Done — implemented and tested."
+**User:** (After the coding assistant finishes implementing rm-001) "Done — implemented and tested."
 
 **Skill (auto-invoked because the task referenced rm-001):**
 1. Marks `rm-001` as `status: done` in `roadmap.yaml`.

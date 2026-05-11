@@ -137,7 +137,7 @@ item id, spec/done_when, workpad path if present, in-scope deliverables, out-of-
 item id + title, workpad path, current branch + sha, last-completed plan item, next-up plan item, reconciliation reminder, workpad protocol reminder, completion-bar reminder, out-of-scope routing reminder, structured-report shape with continuation flag.
 
 **Edge cases:**
-- Workpad exists but no prior subagent thread context (e.g., new Claude Code session) → use first-turn brief regardless of `last_updated`. The continuation brief assumes prior thread context.
+- Workpad exists but no prior worker-agent thread context (e.g., a new assistant session) → use first-turn brief regardless of `last_updated`. The continuation brief assumes prior thread context.
 - Workpad's `last_updated` is in the future (clock skew) → treat as 0 hours; use continuation brief.
 - All Plan items checked but `done_when:` not all met → workpad is stale or wrong; route through resume reconciliation in workpad-protocol.md before dispatch.
 

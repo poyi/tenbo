@@ -2,7 +2,7 @@
 # tenbo — one-line installer / updater.
 #
 # Detects which AI coding agents are on your machine and installs tenbo for
-# each one (Claude Code skill, Cursor rule package), plus optionally the
+# each one (Claude Code skill, Cursor rule package, Codex skill), plus optionally the
 # tenbo-dashboard companion CLI/web app. Skips agents that aren't installed.
 # Safe to re-run — running again pulls the latest from GitHub and npm.
 #
@@ -19,7 +19,7 @@
 #
 # Bash 3.2 safe (works on macOS default bash) — no associative arrays.
 # Inspired by caveman's install.sh (https://github.com/JuliusBrussee/caveman),
-# adapted to tenbo's smaller scope (Claude Code + Cursor today).
+# adapted to tenbo's smaller scope.
 
 set -euo pipefail
 
@@ -29,6 +29,7 @@ REF="${TENBO_REF:-main}"  # override with TENBO_REF=v0.4.0 to pin a tag
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$REF"
 GIT_URL="https://github.com/$REPO.git"
 DASHBOARD_PKG="tenbo-dashboard"
+CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
 
 # ── Flags + state ──────────────────────────────────────────────────────────
 DRY=0
@@ -62,7 +63,7 @@ USAGE
 FLAGS
   --dry-run             Print what would run, do nothing.
   --only <editor>       Install only for the named editor. Repeatable.
-                        Editors: claude, cursor.
+                        Editors: claude, cursor, codex.
   --with-dashboard      Also install the tenbo-dashboard npm package globally.
                         On by default — pass --minimal to skip.
   --minimal             Just the editor packages. Skips dashboard install.
@@ -77,6 +78,7 @@ ENV
 EDITORS DETECTED
   claude   Claude Code     installs skill at .claude/skills/tenbo/
   cursor   Cursor          installs rule at .cursor/rules/tenbo*.mdc
+  codex    Codex           installs skill at ${CODEX_HOME:-$HOME/.codex}/skills/tenbo/
 
 ALSO INSTALLED (default — disable with --minimal)
   tenbo-dashboard         npm package (CLI + local web dashboard)
@@ -90,6 +92,7 @@ EXAMPLES
   install.sh --dry-run                    # show what would happen
   install.sh --minimal                    # editors only, skip dashboard
   install.sh --only cursor                # just install for Cursor
+  install.sh --only codex --minimal       # just install for Codex
   install.sh --only claude --only cursor  # explicitly both
   install.sh --list                       # show the matrix and exit
 
@@ -167,12 +170,13 @@ record_failed()    { FAILED_IDS+=("$1");  FAILED_WHY+=("$2"); }
 
 # ── Editor matrix ──────────────────────────────────────────────────────────
 # id | label | install path | detection probes
-EDITOR_IDS=("claude" "cursor")
-EDITOR_LABELS=("Claude Code" "Cursor")
-EDITOR_INSTALL_PATHS=(".claude/skills/tenbo/" ".cursor/rules/")
+EDITOR_IDS=("claude" "cursor" "codex")
+EDITOR_LABELS=("Claude Code" "Cursor" "Codex")
+EDITOR_INSTALL_PATHS=(".claude/skills/tenbo/" ".cursor/rules/" "$CODEX_HOME_DIR/skills/tenbo/")
 EDITOR_DETECT=(
   "command:claude||dir:.claude/skills"
   "command:cursor||dir:.cursor/rules||dir:$HOME/.cursor"
+  "command:codex||dir:$CODEX_HOME_DIR/skills||dir:$CODEX_HOME_DIR"
 )
 
 # ── --list output ──────────────────────────────────────────────────────────
@@ -276,6 +280,18 @@ install_cursor() {
   ok "  ✔ Cursor rule installed at .cursor/rules/tenbo*.mdc"
 }
 
+install_codex() {
+  if ! ensure_source; then
+    record_failed "codex" "could not fetch source from GitHub"
+    return
+  fi
+  run mkdir -p "$CODEX_HOME_DIR/skills"
+  run rm -rf "$CODEX_HOME_DIR/skills/tenbo"
+  run cp -r "$TMP_TENBO/skill" "$CODEX_HOME_DIR/skills/tenbo"
+  record_installed "codex"
+  ok "  ✔ Codex skill installed at $CODEX_HOME_DIR/skills/tenbo/"
+}
+
 install_dashboard() {
   if ! has npm; then
     record_failed "tenbo-dashboard" "npm not found — install Node.js (https://nodejs.org)"
@@ -319,6 +335,14 @@ while [ $i -lt "$total" ]; do
       case "$id" in
         claude)  install_claude ;;
         cursor)  install_cursor ;;
+        codex)   install_codex ;;
+      esac
+    elif [ ${#ONLY[@]} -gt 0 ]; then
+      echo "→ $label selected (--only)"
+      case "$id" in
+        claude)  install_claude ;;
+        cursor)  install_cursor ;;
+        codex)   install_codex ;;
       esac
     else
       record_skipped "$id" "not detected"
@@ -369,7 +393,7 @@ fi
 if [ "$DETECTED_COUNT" = 0 ] && [ ${#ONLY[@]} -eq 0 ]; then
   echo
   warn "No supported editors detected."
-  warn "tenbo currently supports: Claude Code, Cursor."
+  warn "tenbo currently supports: Claude Code, Cursor, Codex."
   warn "Install one of those first, or pass --only <editor> to force install."
   exit 1
 fi

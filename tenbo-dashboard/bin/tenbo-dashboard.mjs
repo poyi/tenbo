@@ -9,20 +9,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
 /**
- * Find the tsx binary by walking up node_modules from this file's directory.
- * Required because npm hoists shared dependencies to a parent node_modules,
- * so `<package>/node_modules/.bin/tsx` may not exist for consumers.
+ * Find tsx's loader by walking up node_modules from this file's directory.
+ * Running the tsx CLI starts an IPC server for parent/child coordination; some
+ * sandboxes reject that pipe. `node --import <loader>` runs the same TypeScript
+ * entrypoints without that extra IPC listener.
  */
-function findTsx() {
+function findTsxLoader() {
   let dir = __dirname;
   for (let i = 0; i < 10; i++) {
-    const candidate = path.join(dir, 'node_modules', '.bin', 'tsx');
+    const candidate = path.join(dir, 'node_modules', 'tsx', 'dist', 'loader.mjs');
     if (existsSync(candidate)) return candidate;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return 'tsx'; // last-resort fallback to PATH
+  return 'tsx'; // last-resort fallback to package resolution
 }
 
 const [command, ...args] = process.argv.slice(2);
@@ -51,8 +52,8 @@ const commands = {
 const LAUNCH_ALIASES = new Set(['serve', 'start', 'dev']);
 
 function run(script, scriptArgs) {
-  const tsx = findTsx();
-  const child = spawn(tsx, [path.join(root, script), ...scriptArgs], {
+  const tsxLoader = findTsxLoader();
+  const child = spawn(process.execPath, ['--import', tsxLoader, path.join(root, script), ...scriptArgs], {
     stdio: 'inherit',
     cwd: process.cwd(),
   });

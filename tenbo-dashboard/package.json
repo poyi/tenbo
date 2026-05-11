@@ -1,6 +1,6 @@
 {
   "name": "tenbo-dashboard",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Local-first architecture dashboard and CLI tools for .tenbo/ repos",
   "type": "module",
   "license": "MIT",
@@ -37,9 +37,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest",
-    "validate": "tsx scripts/validate-cli.ts",
-    "next-id": "tsx scripts/next-id.ts",
-    "compute-metrics": "tsx scripts/compute-metrics.ts"
+    "validate": "node --import ./node_modules/tsx/dist/loader.mjs scripts/validate-cli.ts",
+    "next-id": "node --import ./node_modules/tsx/dist/loader.mjs scripts/next-id.ts",
+    "compute-metrics": "node --import ./node_modules/tsx/dist/loader.mjs scripts/compute-metrics.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

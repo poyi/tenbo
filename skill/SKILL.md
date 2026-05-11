@@ -360,6 +360,7 @@ Load `references/migrate-docs.md` when triggered.
 > target selection, sequential execution loop with subagent dispatch, completion summary,
 > opt-in parallel execution, and guardrails (max batch size, cost awareness, escape hatch,
 > no nesting, branch safety).
+> In Codex, also load `references/codex-workflow.md` before dispatching worker agents.
 
 ### Health Review and Recommendations
 
@@ -458,8 +459,9 @@ Compact phrasing — always offer picks: "(a) different name, (b) update glossar
 
 *Maps to: "update tenbo", "check for tenbo updates", "is tenbo up to date?"*
 
-Tenbo has up to THREE update surfaces — the Claude Code skill (`.claude/skills/tenbo/`),
-the Cursor rule package (`.cursor/rules/tenbo*.mdc`), and the dashboard CLI (npm).
+Tenbo has up to FOUR update surfaces: the Claude Code skill (`.claude/skills/tenbo/`),
+the Codex skill (`$CODEX_HOME/skills/tenbo` or `~/.codex/skills/tenbo`), the Cursor
+rule package (`.cursor/rules/tenbo*.mdc`), and the dashboard CLI (npm).
 Self-Update detects which surfaces exist locally, checks each against its remote, and
 keeps them in lockstep so a fresh-skill/rule + stale-dashboard combination cannot cause
 silent "command not found" failures inside init.
@@ -485,16 +487,20 @@ min_dashboard: 0.3.0
 ### Procedure
 
 1. **Detect installed surfaces.**
-   - Skill installed if `.claude/skills/tenbo/` exists.
+   - Claude Code skill installed if `.claude/skills/tenbo/` exists.
+   - Codex skill installed if `$CODEX_HOME/skills/tenbo/` exists, or if `CODEX_HOME`
+     is unset and `~/.codex/skills/tenbo/` exists. Record the detected path as
+     `CODEX_SKILL_PATH`.
    - Cursor rule installed if `.cursor/rules/tenbo.mdc` exists (or any `tenbo*.mdc` in that dir).
    - Dashboard installed if `npx --no-install tenbo-dashboard --version` returns cleanly.
 2. **Read local versions** for each detected surface.
-   - Skill: parse `.claude/skills/tenbo/VERSION`.
+   - Claude Code skill: parse `.claude/skills/tenbo/VERSION`.
+   - Codex skill: parse the detected Codex skill path's `VERSION`.
    - Cursor: parse `.cursor/rules/tenbo-VERSION` (named with the `tenbo-` prefix to avoid
      collision with other rule packages installed in the same `.cursor/rules/` directory).
    - Dashboard: `npx --no-install tenbo-dashboard --version`.
 3. **Fetch remote versions.**
-   - Skill: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION`.
+   - Skill packages: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION`.
    - Cursor: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/cursor/VERSION`.
    - Dashboard: `npm view tenbo-dashboard version --json` (5s timeout). On network failure
      for any surface: report and continue with the surfaces that succeeded.
@@ -520,8 +526,10 @@ min_dashboard: 0.3.0
    b. **Skill / rule second** (if needed). For each surface that needs updating:
       ```
       git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo-update
-      # Skill, if installed:
-      cp -r /tmp/tenbo-update/skill/ .claude/skills/tenbo/
+      # Claude Code skill, if installed:
+      cp -r /tmp/tenbo-update/skill/. .claude/skills/tenbo/
+      # Codex skill, if installed:
+      cp -r /tmp/tenbo-update/skill/. "$CODEX_SKILL_PATH/"
       # Cursor rule, if installed:
       cp -r /tmp/tenbo-update/cursor/. .cursor/rules/    # flat copy of all .mdc + templates
       rm -rf /tmp/tenbo-update

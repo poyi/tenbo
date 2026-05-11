@@ -9,7 +9,7 @@ import { allocateNextId, STALE_LOCK_MS } from './next-id';
 // under jsdom. Vitest runs from the package root, so cwd === tenbo-dashboard.
 const APP_ROOT = process.cwd();
 const SCRIPT_PATH = path.join(APP_ROOT, 'scripts', 'next-id.ts');
-const TSX_BIN = path.join(APP_ROOT, 'node_modules', '.bin', 'tsx');
+const TSX_LOADER = path.join(APP_ROOT, 'node_modules', 'tsx', 'dist', 'loader.mjs');
 
 const created: string[] = [];
 
@@ -98,7 +98,7 @@ describe('next-id allocator', () => {
     // Fan out N parallel child processes that all try to allocate `ed`.
     const N = 5;
     const procs = Array.from({ length: N }, () =>
-      spawnSync(TSX_BIN, [SCRIPT_PATH, 'ed'], {
+      spawnSync(process.execPath, ['--import', TSX_LOADER, SCRIPT_PATH, 'ed'], {
         cwd: root,
         encoding: 'utf8',
       }),

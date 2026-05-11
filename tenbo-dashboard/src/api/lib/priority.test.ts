@@ -3,9 +3,7 @@ import { sortByPriority, comparePriority } from './priority';
 import type { Item, Priority } from '../../types';
 
 const item = (id: string, priority?: Priority): Item =>
-  ({ id, title: id, status: 'now', description: '' } as Item) as any && (
-    { id, title: id, status: 'now', description: '', priority } as unknown as Item
-  );
+  ({ id, title: id, status: 'now', description: '', priority } as unknown as Item);
 
 describe('sortByPriority', () => {
   it('orders p0 → p1 → p2 → p3 → unset', () => {
