@@ -10,6 +10,7 @@ const FORBIDDEN_JARGON = [
 
 const VALID_STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
 const VALID_PRIORITIES = new Set(['p0', 'p1', 'p2', 'p3']);
+const VALID_VERIFICATION_STATUSES = new Set(['not_required', 'pending_live', 'verified', 'failed']);
 const ITEM_ID_RE = /^[a-z]{1,5}-\d{3,}$/;
 const DOC_UPDATE_REQUIRED_TYPES = new Set(['feature', 'refactor', 'bug']);
 const DOC_UPDATE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -257,6 +258,45 @@ export function validate(state: TenboState): ValidateResult {
       }
       if (item.status === 'now' && !item.done_when?.length) {
         warnings.push({ level: 'warning', message: `item "${item.id}" has status:now but no done_when criteria`, scope: scope.id, itemId: item.id });
+      }
+      if (item.verification !== undefined) {
+        const verification = item.verification as any;
+        if (!verification || typeof verification !== 'object' || Array.isArray(verification)) {
+          warnings.push({ level: 'warning', message: `item ${item.id}.verification must be an object`, scope: scope.id, itemId: item.id });
+        } else {
+          if (!VALID_VERIFICATION_STATUSES.has(verification.status)) {
+            warnings.push({
+              level: 'warning',
+              message: `item ${item.id}.verification.status must be one of not_required, pending_live, verified, failed`,
+              scope: scope.id,
+              itemId: item.id,
+            });
+          }
+          if (verification.evidence !== undefined && (!Array.isArray(verification.evidence) || verification.evidence.some((entry: unknown) => typeof entry !== 'string'))) {
+            warnings.push({
+              level: 'warning',
+              message: `item ${item.id}.verification.evidence must be a string array`,
+              scope: scope.id,
+              itemId: item.id,
+            });
+          }
+          if (verification.updated_at !== undefined && typeof verification.updated_at !== 'string') {
+            warnings.push({
+              level: 'warning',
+              message: `item ${item.id}.verification.updated_at must be an ISO timestamp string`,
+              scope: scope.id,
+              itemId: item.id,
+            });
+          }
+          if (verification.note !== undefined && typeof verification.note !== 'string') {
+            warnings.push({
+              level: 'warning',
+              message: `item ${item.id}.verification.note must be a string`,
+              scope: scope.id,
+              itemId: item.id,
+            });
+          }
+        }
       }
       for (const word of FORBIDDEN_JARGON) {
         const re = new RegExp(`\\b${word}\\b`, 'i');

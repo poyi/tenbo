@@ -4,7 +4,7 @@ import { patchItem, readState } from '../lib/tenboFs';
 import { recordRecentWrite } from '../lib/recentWrites';
 import { readBody, json, error, withErrorHandling } from '../lib/http';
 
-const ALLOWED = new Set(['title', 'description', 'status', 'layer', 'notes', 'links', 'priority', 'done_when', 'files_to_read', 'risks', 'phases']);
+const ALLOWED = new Set(['title', 'description', 'status', 'layer', 'notes', 'links', 'verification', 'priority', 'done_when', 'files_to_read', 'risks', 'phases']);
 
 export function itemsRoute(repoRoot: string): Connect.NextHandleFunction {
   return withErrorHandling(async (req, res, next) => {

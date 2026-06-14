@@ -47,7 +47,8 @@ summary. Judgment calls use the universal prompting rule.
 7. **Run the completion bar** (`tenbo-completion-bar.mdc`). All rules must pass.
    On failure: surface the specific rule, fix or seek user input, re-run the bar.
    On override: user must explicitly invoke; record `bar_override: <reason>` on the row.
-8. **Mark done.** Set `status: done`. Archive spec if `links:` points into `.tenbo/specs/`.
+8. **Mark done.** Prefer `npx tenbo-dashboard item set-status <item-id> done` over
+   hand-editing roadmap YAML. Archive spec if `links:` points into `.tenbo/specs/`.
    Archive workpad to `.tenbo/workpads/archive/<item-id>.md` if present.
    Phased: mark only the matching phase; archive spec/workpad when all phases done.
 9. **Auto-archive check.** After marking done, count `done` + `dropped` items in

@@ -23,7 +23,8 @@
     "node": ">=18"
   },
   "bin": {
-    "tenbo-dashboard": "./bin/tenbo-dashboard.mjs"
+    "tenbo-dashboard": "./bin/tenbo-dashboard.mjs",
+    "tenbo": "./bin/tenbo-dashboard.mjs"
   },
   "files": [
     "bin/",

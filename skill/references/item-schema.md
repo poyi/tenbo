@@ -4,6 +4,7 @@ Optional fields items in `roadmap.yaml` may carry:
 
 - `links:` — array of paths (relative to repo root) to plans/specs for this item.
 - `notes:` — markdown string with timestamped context notes.
+- `verification:` — optional object describing how proven the item is independently from implementation status. Shape: `{status, updated_at?, evidence?, note?}` where `status` is `not_required`, `pending_live`, `verified`, or `failed`; `evidence` is a list of command names, URLs, commit refs, or manual checks.
 - `doc_update:` — ISO date (`2026-04-28`) or `skipped — <reason>`; required for `done` items of type feature/bug/refactor. The validator warns when absent.
 - `spawned_from:` — id of the item that surfaced this one.
 - `superseded_by:` — id of the item that replaced this one. Item must be `dropped`.
@@ -24,5 +25,17 @@ Optional fields items in `roadmap.yaml` may carry:
 **Spec files:** When creating a plan or spec, include `tenbo_item: <id>` in the file's frontmatter and append its path to the item's `links:`.
 
 **Notes:** When the user adds context ("note on X: …"), append a timestamped bullet to `notes:`.
+
+**Agent-safe CLI:** Prefer typed CLI commands for common item mutations instead of hand-editing roadmap YAML:
+
+```bash
+npx tenbo-dashboard item show <id> --json
+npx tenbo-dashboard item set-status <id> <now|next|later|done|dropped>
+npx tenbo-dashboard item add-note <id> "<note>"
+npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed> --evidence "<evidence>"
+npx tenbo-dashboard item link-commit <id> <sha>
+npx tenbo-dashboard items --status <status> --verification <verification-status> --json
+npx tenbo-dashboard next --json
+```
 
 **Workpad vs. notes:** `notes:` is for short context bullets the user dictates inline. `workpad:` is the structured living document Tenbo authors for substantial in-flight work. Lightweight items use `notes:` only; substantial items use both, with workpad as the durable execution state.

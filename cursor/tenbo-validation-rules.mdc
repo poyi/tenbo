@@ -79,6 +79,11 @@ Example output:
 22. **`notes:` field** is free-form markdown; no validation.
 23. **`tenbo_item:`** in plan/spec frontmatter SHOULD reference a real roadmap item. If not, warn: "<path> declares tenbo_item: rm-NNN which doesn't exist in any scope."
 
+55. **`verification:`** is optional. When present, it must be an object with
+    `status` equal to `not_required`, `pending_live`, `verified`, or `failed`.
+    `evidence`, when present, must be a string array. `updated_at` and `note`,
+    when present, must be strings.
+
 ## Phase tracking (optional `phases:` field)
 
 A roadmap item MAY include an optional `phases:` list to track multi-phase work natively (instead of dated prose in `notes:`). When present:

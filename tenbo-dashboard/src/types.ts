@@ -8,6 +8,16 @@ import type { Finding } from './api/lib/health/types';
 
 export type Status = 'now' | 'next' | 'later' | 'done' | 'dropped';
 
+export type VerificationStatus = 'not_required' | 'pending_live' | 'verified' | 'failed';
+
+export interface ItemVerification {
+  status: VerificationStatus;
+  /** ISO 8601 UTC timestamp. */
+  updated_at?: string;
+  evidence?: string[];
+  note?: string;
+}
+
 /**
  * Advisory priority marker. Does NOT affect roadmap ordering — items still execute
  * in `status` bucket + file order (see Behavior 6). Priority is purely a flag agents
@@ -45,6 +55,7 @@ export interface Item {
   description: string;
   links?: string[];
   notes?: string;
+  verification?: ItemVerification;
   /** layer ids touched by this item (bare ids for same-scope items, "<scope>:<layer>" for cross-scope items) */
   affects?: string[];
   /** 1–3 plain-language bullets defining "done" */

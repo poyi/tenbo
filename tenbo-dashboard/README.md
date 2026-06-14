@@ -38,12 +38,21 @@ Surfaces the things that would otherwise become tech debt nobody mentions: overs
 The same package ships commands the skill uses behind the scenes — also runnable directly:
 
 ```bash
+npx tenbo-dashboard item show sk-030 --json
+npx tenbo-dashboard item set-status sk-030 done
+npx tenbo-dashboard item add-note sk-030 "Implemented; live verification pending"
+npx tenbo-dashboard item verify sk-030 --status pending_live --evidence "npm test -- --run"
+npx tenbo-dashboard item link-commit sk-030 7fc09a5
+npx tenbo-dashboard items --status done --verification pending_live --json
+npx tenbo-dashboard next --json
 npx tenbo-dashboard validate          # Schema + consistency checks
 npx tenbo-dashboard init-check        # Strict completeness check after fresh init
 npx tenbo-dashboard metrics --all     # Recompute scope metrics + health findings
 npx tenbo-dashboard next-id <prefix>  # Allocate next roadmap item ID
 npx tenbo-dashboard --version         # Print the installed version
 ```
+
+Installed packages also expose a shorter `tenbo` binary alias for the same commands.
 
 ## What is tenbo?
 

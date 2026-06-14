@@ -549,6 +549,26 @@ http://localhost:5174. Suggest for full roadmap browsing, item triage, or
 drag-reorder. Answer quick questions in chat. The dashboard reads and writes the
 same `.tenbo/` files — changes sync live.
 
+## Agent-Safe CLI Fast Path
+
+Prefer typed CLI commands for common roadmap reads and mutations instead of
+hand-editing roadmap YAML. The package exposes the historical `tenbo-dashboard`
+binary and an installed `tenbo` alias; use `npx tenbo-dashboard ...` for one-shot
+package execution.
+
+```bash
+npx tenbo-dashboard item show <id> --json
+npx tenbo-dashboard item set-status <id> <now|next|later|done|dropped>
+npx tenbo-dashboard item add-note <id> "<note>"
+npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed> --evidence "<evidence>"
+npx tenbo-dashboard item link-commit <id> <sha>
+npx tenbo-dashboard items --status <status> --verification <verification-status> --json
+npx tenbo-dashboard next --json
+```
+
+Use direct YAML edits only for operations the CLI does not support yet, such as
+creating a new item or changing rich fields during planning.
+
 ---
 
 ## Validation

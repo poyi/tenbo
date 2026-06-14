@@ -41,6 +41,9 @@ const commands = {
   'init-check': 'scripts/init-check.ts',
   sync: 'scripts/sync.ts',
   archive: 'scripts/archive.ts',
+  item: 'scripts/item.ts',
+  items: 'scripts/items.ts',
+  next: 'scripts/next.ts',
   hook: 'scripts/hook.ts',
 };
 
@@ -78,6 +81,15 @@ Usage:
   tenbo-dashboard                  Launch the dashboard (http://localhost:5174)
   tenbo-dashboard serve            Same as bare invocation (also: 'start', 'dev')
   tenbo-dashboard sync             Refresh tenbo state after a change (metrics + init-check + validate, surfaces new findings)
+  tenbo-dashboard item show <id> [--json]
+  tenbo-dashboard item set-status <id> <now|next|later|done|dropped> [--json]
+  tenbo-dashboard item add-note <id> "<note>" [--json]
+  tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed>
+                                   [--evidence "<text>"] [--note "<text>"] [--json]
+  tenbo-dashboard item link-commit <id> <sha> [--json]
+  tenbo-dashboard items            Query roadmap items [--status <status>]
+                                   [--verification <status>] [--goal <goal>] [--json]
+  tenbo-dashboard next             Show next actionable roadmap items [--json]
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
   tenbo-dashboard next-id <prefix> Allocate next roadmap item ID
