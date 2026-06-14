@@ -1,6 +1,6 @@
 import type { Connect } from 'vite';
-import { readState, readWorkspace, tenboExists } from '../lib/tenboFs';
-import { ensureFresh } from '../lib/metricsRefresh';
+import { readState, tenboExists } from '../lib/tenboFs';
+import { metricsStatusForScopes } from '../lib/metricsRefreshQueue';
 import { json, error, withErrorHandling } from '../lib/http';
 
 export function stateRoute(repoRoot: string): Connect.NextHandleFunction {
@@ -9,15 +9,8 @@ export function stateRoute(repoRoot: string): Connect.NextHandleFunction {
     if (!tenboExists(repoRoot)) {
       return error(res, 404, 'no .tenbo/ found at repo root');
     }
-    const { scopeRefs } = readWorkspace(repoRoot);
-    for (const ref of scopeRefs) {
-      try {
-        await ensureFresh(repoRoot, ref.id);
-      } catch (e) {
-        console.warn(`tenbo: metric refresh failed for scope ${ref.id}:`, e);
-      }
-    }
     const state = readState(repoRoot);
+    state.metricsStatus = metricsStatusForScopes(repoRoot, state.scopes, state.metrics);
     json(res, state);
   });
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { LayerDocs, Scope, ScopeMetrics, LayerMetrics } from '../../types';
+import { shouldIgnoreSourceDir } from './sourceIgnore';
 
 function matchGlob(repoRoot: string, scopePath: string, globs: string[]): string[] {
   const root = path.resolve(repoRoot, scopePath);
@@ -13,7 +14,9 @@ function matchGlob(repoRoot: string, scopePath: string, globs: string[]): string
       const full = path.join(dir, entry);
       let st;
       try { st = statSync(full); } catch { continue; }
-      if (st.isDirectory()) walk(full);
+      if (st.isDirectory()) {
+        if (!shouldIgnoreSourceDir(entry)) walk(full);
+      }
       else {
         const rel = path.relative(root, full).split(path.sep).join('/');
         if (globs.some(g => globMatches(g, rel))) matches.push(full);

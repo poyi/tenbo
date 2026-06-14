@@ -46,4 +46,26 @@ describe('HealthPage', () => {
     render(<HealthPage state={state} onSelectLayer={vi.fn()} onSelectFinding={vi.fn()} />);
     expect(screen.queryByText(/\(limit \d+\)/)).toBeNull();
   });
+
+  it('surfaces stale metrics status without hiding cached health data', () => {
+    render(
+      <HealthPage
+        state={{
+          ...state,
+          metricsStatus: {
+            editor: {
+              status: 'refreshing',
+              generatedAt: '2026-05-02T00:00:00Z',
+              message: 'Refreshing health metrics in the background; cached metrics are still being served.',
+            },
+          },
+        }}
+        onSelectLayer={vi.fn()}
+        onSelectFinding={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Health metrics refreshing');
+    expect(screen.getByText('Visual Canvas')).toBeInTheDocument();
+  });
 });

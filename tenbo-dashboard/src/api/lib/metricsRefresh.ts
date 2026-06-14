@@ -4,6 +4,7 @@ import { parse as parseSimple } from 'yaml';
 import { computeScopeMetrics } from './metrics.js';
 import { collectAll } from './health/collectAll.js';
 import { loadHealthConfig } from './health/config.js';
+import { shouldIgnoreSourceDir } from './sourceIgnore.js';
 import type { LayerDocs, Scope, ScopeMetrics, Item, Layer } from '../../types.js';
 
 const TRACKED_FILES = ['architecture.yaml', 'roadmap.yaml'];
@@ -44,7 +45,7 @@ function latestMtimeInTree(root: string): number {
   let entries: string[];
   try { entries = readdirSync(root); } catch { return 0; }
   for (const entry of entries) {
-    if (entry === 'node_modules' || entry === '.git' || entry === 'dist' || entry === 'build') continue;
+    if (shouldIgnoreSourceDir(entry)) continue;
     const full = path.join(root, entry);
     let st;
     try { st = statSync(full); } catch { continue; }

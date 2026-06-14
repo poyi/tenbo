@@ -155,6 +155,18 @@ export interface ScopeMetrics {
   findings: Finding[];
 }
 
+export type MetricsRefreshState = 'fresh' | 'stale' | 'refreshing' | 'failed';
+
+export interface MetricsRefreshStatus {
+  status: MetricsRefreshState;
+  generatedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  message?: string;
+  warning?: string;
+  error?: string;
+}
+
 /** In-memory file-presence flags; composed by tenboFs from filesystem checks. Not on disk. */
 export interface LayerDocs {
   hasIntent: boolean;
@@ -175,6 +187,7 @@ export interface TenboState {
   crossCuttingRoadmap?: Item[];
   layerDocs?: Record<string, LayerDocs>;
   metrics?: Record<string, ScopeMetrics>;
+  metricsStatus?: Record<string, MetricsRefreshStatus>;
   /**
    * Set of repo-relative paths of every file present under `.tenbo/specs/`
    * (including `.tenbo/specs/archive/`). Populated by tenboFs.readState; used

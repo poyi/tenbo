@@ -9,6 +9,7 @@ import { watchRoute } from './routes/watch';
 import { layerDocsRoute } from './routes/layerDocs';
 import { layerContentRoute } from './routes/layerContent';
 import { archiveRoute } from './routes/archive';
+import { refreshMetricsRoute } from './routes/refreshMetrics';
 
 export function tenboApiPlugin(): Plugin {
   return {
@@ -27,6 +28,7 @@ export function tenboApiPlugin(): Plugin {
       const watch = watchRoute(repoRoot);
       server.middlewares.use(watch.handler);
       server.httpServer?.on('close', () => { void watch.close(); });
+      server.middlewares.use(refreshMetricsRoute(repoRoot));
       server.middlewares.use(layerDocsRoute(repoRoot));
       server.middlewares.use(layerContentRoute(repoRoot));
       server.middlewares.use(archiveRoute(repoRoot));

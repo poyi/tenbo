@@ -6,6 +6,24 @@
 .section { margin-bottom: 32px; }
 .sectionTitle { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted, #888); margin-bottom: 12px; }
 
+.statusBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -12px 0 24px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+  background: var(--console-soot);
+  color: var(--muted, #888);
+  font-size: 13px;
+}
+.statusTitle {
+  color: var(--text, #ddd);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .findingList { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .findingRow {
   display: grid;

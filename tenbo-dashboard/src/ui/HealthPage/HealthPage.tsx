@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TenboState } from '../../types';
+import type { MetricsRefreshStatus, MetricsRefreshState, TenboState } from '../../types';
 import type { Finding } from '../../api/lib/health/types';
 import { SIGNAL_WEIGHTS_DEFAULT } from '../../api/lib/health/types';
 import { Digest } from './Digest';
@@ -13,6 +13,19 @@ interface Props {
   onSelectFinding: (finding: Finding) => void;
 }
 
+const STATUS_PRIORITY: Record<MetricsRefreshState, number> = {
+  failed: 0,
+  refreshing: 1,
+  stale: 2,
+  fresh: 3,
+};
+
+function summarizeMetricsStatus(statuses: Record<string, MetricsRefreshStatus> | undefined): MetricsRefreshStatus | null {
+  const visible = Object.values(statuses ?? {}).filter((status) => status.status !== 'fresh');
+  if (visible.length === 0) return null;
+  return visible.sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status])[0];
+}
+
 export function HealthPage({ state, onSelectLayer, onSelectFinding }: Props) {
   const allFindings = useMemo<Finding[]>(() => {
     const out: Finding[] = [];
@@ -22,6 +35,7 @@ export function HealthPage({ state, onSelectLayer, onSelectFinding }: Props) {
 
   const totals = { critical: 0, warning: 0, info: 0 };
   for (const f of allFindings) totals[f.severity]++;
+  const metricsStatus = summarizeMetricsStatus(state.metricsStatus);
 
   return (
     <div className={styles.page}>
@@ -31,6 +45,15 @@ export function HealthPage({ state, onSelectLayer, onSelectFinding }: Props) {
           <SeverityLegend counts={totals} />
         </div>
       </section>
+
+      {metricsStatus && (
+        <div className={styles.statusBanner} role="status">
+          <span className={styles.statusTitle}>
+            Health metrics {metricsStatus.status}
+          </span>
+          <span>{metricsStatus.warning ?? metricsStatus.message ?? metricsStatus.error}</span>
+        </div>
+      )}
 
       <Digest
         findings={allFindings}
