@@ -8,16 +8,10 @@ import { globMatches } from '../metrics';
  */
 export function resolveLayerFiles(repoRoot: string, scope: Scope): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const layer of scope.layers) {
-    out[layer.id] = matchLayerFiles(repoRoot, scope.path, layer.files ?? []);
-  }
-  return out;
-}
+  const root = path.resolve(repoRoot, scope.path);
+  for (const layer of scope.layers) out[layer.id] = [];
+  if (!existsSync(root)) return out;
 
-function matchLayerFiles(repoRoot: string, scopePath: string, globs: string[]): string[] {
-  const root = path.resolve(repoRoot, scopePath);
-  if (!existsSync(root)) return [];
-  const matches: string[] = [];
   function walk(dir: string) {
     let entries: string[];
     try { entries = readdirSync(dir); } catch { return; }
@@ -28,13 +22,16 @@ function matchLayerFiles(repoRoot: string, scopePath: string, globs: string[]): 
       if (st.isDirectory()) walk(full);
       else {
         const relToScope = path.relative(root, full).split(path.sep).join('/');
-        if (globs.some(g => globMatches(g, relToScope))) {
-          const relToRepo = path.relative(repoRoot, full).split(path.sep).join('/');
-          matches.push(relToRepo);
+        const relToRepo = path.relative(repoRoot, full).split(path.sep).join('/');
+        for (const layer of scope.layers) {
+          const globs = layer.files ?? [];
+          if (globs.some(g => globMatches(g, relToScope))) {
+            out[layer.id].push(relToRepo);
+          }
         }
       }
     }
   }
   walk(root);
-  return matches;
+  return out;
 }

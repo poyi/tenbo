@@ -21,8 +21,15 @@ describe('health types', () => {
       layer: 'x',
       target: 'apps/editor/foo.ts',
       headline: 'foo has no consumers',
-      suggestion: { summary: 'Delete file', rationale: 'unused', action_kind: 'delete-file' },
-      details: { kind: 'dead-code', exports: [], last_imported_commit: null, git_age_days: 0 },
+      suggestion: { summary: 'Review file', rationale: 'unused', action_kind: 'review-file' },
+      details: {
+        kind: 'dead-code',
+        exports: [],
+        last_imported_commit: null,
+        git_age_days: 0,
+        repo_static_importers: [],
+        static_import_evidence: 'No repo-wide static import found.',
+      },
     };
     expect(f.signal).toBe('dead-code');
   });

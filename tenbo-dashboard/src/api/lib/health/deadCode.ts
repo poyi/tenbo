@@ -1,52 +1,39 @@
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import type { Finding } from './types';
 import type { ImportGraph } from './importGraph';
 
 const ENTRY_PATTERNS = [
-  /\/main\.tsx?$/, /\/index\.tsx?$/, /\.test\.tsx?$/, /\.config\.[mc]?[jt]s$/, /vite\.config/,
+  /\/main\.tsx?$/,
+  /\/App\.tsx?$/,
+  /\/AppRoutes\.tsx?$/,
+  /\/index\.tsx?$/,
+  /\/routes?\//,
+  /\.test\.tsx?$/,
+  /\.spec\.tsx?$/,
+  /\.stories\.tsx?$/,
+  /\.config\.[mc]?[jt]s$/,
+  /vite\.config/,
+  /generated/i,
 ];
 
 function isLikelyEntry(file: string): boolean {
   return ENTRY_PATTERNS.some(re => re.test(file));
 }
 
-function lastImportedCommit(repoRoot: string, file: string): string | null {
-  try {
-    const out = execSync(`git log -1 --pretty=format:%H -- "${file}"`, {
-      cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return out.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function gitAgeDays(repoRoot: string, file: string): number {
-  try {
-    const out = execSync(`git log -1 --pretty=format:%at -- "${file}"`, {
-      cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const ts = Number(out.trim()) * 1000;
-    if (!ts) return 0;
-    return Math.floor((Date.now() - ts) / (24 * 3600 * 1000));
-  } catch {
-    return 0;
-  }
-}
-
 export function analyzeDeadCode(
-  repoRoot: string,
+  _repoRoot: string,
   layerId: string,
   files: string[],
   graph: ImportGraph,
 ): Finding[] {
   const findings: Finding[] = [];
-  for (const rel of files) {
-    // Only analyze TypeScript/TSX source files
-    if (!/\.tsx?$/.test(rel)) continue;
-    if (rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) continue;
-    if (graph.importedBy(rel).length > 0) continue;
+  const candidates = files.filter(rel => {
+    if (!/\.tsx?$/.test(rel)) return false;
+    if (rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) return false;
+    return graph.importedBy(rel).length === 0;
+  });
+  for (const rel of candidates) {
+    const importers = graph.importedBy(rel);
     const filename = path.basename(rel);
     const isEntry = isLikelyEntry(rel);
     findings.push({
@@ -56,19 +43,21 @@ export function analyzeDeadCode(
       confidence: isEntry ? 'low' : 'high',
       layer: layerId,
       target: rel,
-      headline: `${filename} has no in-repo importers`,
+      headline: `${filename} has no repo-wide static importers`,
       suggestion: {
-        summary: isEntry ? `Confirm ${filename} is intentionally an entry point` : `Delete ${filename}`,
+        summary: isEntry ? `Review ${filename} as a possible entry point` : `Review ${filename}`,
         rationale: isEntry
-          ? 'Looks like an entry point (main, index, config, test). Verify before deleting.'
-          : 'No file in the repo imports this. Likely safe to remove.',
-        action_kind: 'delete-file',
+          ? 'Looks like an entry point, route, config, story, test helper, or generated adapter. Verify its role before making changes.'
+          : 'No repo-wide static import or barrel re-export was found. Review dynamic references and runtime entry points before removing it.',
+        action_kind: 'review-file',
       },
       details: {
         kind: 'dead-code',
         exports: [],
-        last_imported_commit: lastImportedCommit(repoRoot, rel),
-        git_age_days: gitAgeDays(repoRoot, rel),
+        last_imported_commit: null,
+        git_age_days: 0,
+        repo_static_importers: importers,
+        static_import_evidence: 'No repo-wide static import or barrel re-export found in the scope import graph.',
       },
     });
   }

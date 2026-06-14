@@ -16,7 +16,11 @@ describe('analyzeDeadCode', () => {
     const graph = buildImportGraph(root, ['src/entry.ts', 'src/used.ts', 'src/unused.ts']);
 
     const findings = analyzeDeadCode(root, 'lyr', ['src/used.ts', 'src/unused.ts'], graph);
-    expect(findings.find(f => f.target === 'src/unused.ts')).toBeDefined();
+    const unusedFinding = findings.find(f => f.target === 'src/unused.ts');
+    expect(unusedFinding).toBeDefined();
+    expect(unusedFinding?.suggestion.summary).toBe('Review unused.ts');
+    expect(unusedFinding?.suggestion.action_kind).toBe('review-file');
+    expect(unusedFinding?.details.kind === 'dead-code' ? unusedFinding.details.static_import_evidence : '').toContain('No repo-wide static import');
     expect(findings.find(f => f.target === 'src/used.ts')).toBeUndefined();
     rmSync(root, { recursive: true, force: true });
   });

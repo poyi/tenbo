@@ -1,6 +1,8 @@
 import type { Item, Scope } from '../../../types';
 import type { Finding, Signal } from './types';
 import type { HealthConfig } from './config';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { resolveLayerFiles } from './layerFiles';
 import { analyzeHotspotFiles } from './hotspotFiles';
 import { analyzeAgingTodos } from './agingTodos';
@@ -37,12 +39,56 @@ const ANALYZERS: Record<Signal, AnalyzerFn | null> = {
   'redundancy':               null, // Phase 4
 };
 
+const SOURCE_EXT_RE = /\.tsx?$/;
+const IGNORED_SOURCE_DIRS = new Set([
+  '.git',
+  '.tenbo',
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+  '.next',
+  '.turbo',
+  'out',
+]);
+
+function collectScopeSourceFiles(repoRoot: string, scopePath: string, seedFiles: string[]): string[] {
+  const sourceFiles = new Set(seedFiles.filter(f => SOURCE_EXT_RE.test(f)));
+  const root = path.resolve(repoRoot, scopePath || '.');
+  if (!existsSync(root)) return Array.from(sourceFiles).sort();
+
+  function walk(dir: string) {
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { return; }
+    for (const entry of entries.sort()) {
+      if (IGNORED_SOURCE_DIRS.has(entry)) continue;
+      const full = path.join(dir, entry);
+      let st;
+      try { st = statSync(full); } catch { continue; }
+      if (st.isDirectory()) {
+        walk(full);
+      } else if (SOURCE_EXT_RE.test(entry) && !entry.endsWith('.d.ts')) {
+        sourceFiles.add(path.relative(repoRoot, full).split(path.sep).join('/'));
+      }
+    }
+  }
+  walk(root);
+  return Array.from(sourceFiles).sort();
+}
+
+function tsConfigForScope(repoRoot: string, scopePath: string): string | undefined {
+  const scoped = path.join(repoRoot, scopePath || '.', 'tsconfig.json');
+  if (existsSync(scoped)) return scoped;
+  const root = path.join(repoRoot, 'tsconfig.json');
+  return existsSync(root) ? root : undefined;
+}
+
 export async function collectAll(repoRoot: string, scope: Scope, config: HealthConfig, allItems?: Map<string, Item>): Promise<Finding[]> {
   const filesByLayer = resolveLayerFiles(repoRoot, scope);
-  const allTsFiles = Object.values(filesByLayer).flat().filter(f => /\.tsx?$/.test(f));
+  const allTsFiles = collectScopeSourceFiles(repoRoot, scope.path, Object.values(filesByLayer).flat());
   let graph: ImportGraph | undefined;
   try {
-    graph = buildImportGraph(repoRoot, allTsFiles);
+    graph = buildImportGraph(repoRoot, allTsFiles, { tsConfigFilePath: tsConfigForScope(repoRoot, scope.path) });
   } catch {
     // No tsconfig or build error — skip import-graph dependent analyzers
   }
