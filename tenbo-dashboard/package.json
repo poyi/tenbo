@@ -1,6 +1,6 @@
 {
   "name": "tenbo-dashboard",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Local-first architecture dashboard and CLI tools for .tenbo/ repos",
   "type": "module",
   "license": "MIT",
