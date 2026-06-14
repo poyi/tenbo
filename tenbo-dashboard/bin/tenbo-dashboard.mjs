@@ -44,6 +44,7 @@ const commands = {
   item: 'scripts/item.ts',
   items: 'scripts/items.ts',
   next: 'scripts/next.ts',
+  context: 'scripts/context.ts',
   hook: 'scripts/hook.ts',
 };
 
@@ -90,6 +91,8 @@ Usage:
   tenbo-dashboard items            Query roadmap items [--status <status>]
                                    [--verification <status>] [--goal <goal>] [--json]
   tenbo-dashboard next             Show next actionable roadmap items [--json]
+  tenbo-dashboard context feature  Fetch agent planning context for a natural-language request
+                                   --query "<request>" [--json]
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
   tenbo-dashboard next-id <prefix> Allocate next roadmap item ID

@@ -206,6 +206,7 @@ npx tenbo-dashboard item verify sk-030 --status pending_live --evidence "npm tes
 npx tenbo-dashboard item link-commit sk-030 7fc09a5
 npx tenbo-dashboard items --status done --verification pending_live --json
 npx tenbo-dashboard next --json
+npx tenbo-dashboard context feature --query "help me build X" --json
 npx tenbo-dashboard validate          # Schema + consistency checks
 npx tenbo-dashboard init-check        # Strict completeness check after fresh init
 npx tenbo-dashboard metrics --all     # Recompute scope metrics + health findings
@@ -214,6 +215,10 @@ npx tenbo-dashboard --version         # Print the installed version
 ```
 
 Installed packages also expose a shorter `tenbo` binary alias for the same commands.
+
+The `context feature` command is the agent fast path: it turns a natural-language
+build request into a compact JSON bundle with likely scope/layers, matching roadmap
+items, active work, goal refs, files to read, and context freshness warnings.
 
 ### Opt-in: stricter local validation
 

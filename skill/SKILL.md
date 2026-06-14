@@ -182,6 +182,22 @@ single source of truth for setup behavior — when in doubt, read it before acti
 
 *Maps to: idea capture, "what should I build next", planning an existing item.*
 
+#### Automatic context fetch
+
+Before planning or implementing a normal feature/build request, silently try:
+
+```bash
+npx tenbo-dashboard context feature --query "<user request>" --json
+```
+
+Use the returned bundle as the first context source: product goals, likely scope/layers,
+matching roadmap items, active/next work, recommended files, and freshness warnings.
+High confidence → proceed with the recommended scope/layers. Medium confidence → proceed
+with the best match and ask one compact confirmation at the end. Low confidence → ask one
+clarifying question before planning. If the command is unavailable or fails because the
+installed dashboard is older than the skill, fall back to the tiered context-loading
+subroutine and consider suggesting a tenbo update after the main task.
+
 #### Capture path
 
 1. Read `architecture.yaml` per scope and skim layer narratives. Load layer constraints
@@ -564,6 +580,7 @@ npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verifie
 npx tenbo-dashboard item link-commit <id> <sha>
 npx tenbo-dashboard items --status <status> --verification <verification-status> --json
 npx tenbo-dashboard next --json
+npx tenbo-dashboard context feature --query "<user request>" --json
 ```
 
 Use direct YAML edits only for operations the CLI does not support yet, such as
