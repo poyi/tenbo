@@ -1,15 +1,6 @@
 import { resolveFeatureContext } from '../src/api/lib/contextResolver';
-import { fail, handleCliError, isMain, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
-
-function hasFlag(args: string[], flag: string): boolean {
-  return args.includes(flag);
-}
-
-function readOption(args: string[], flag: string): string | undefined {
-  const i = args.indexOf(flag);
-  if (i === -1) return undefined;
-  return args[i + 1];
-}
+import { hasFlag, readOption } from './cliArgs';
+import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
 
 export function runContextCli(repoRoot: string, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
@@ -18,7 +9,7 @@ export function runContextCli(repoRoot: string, args: string[]): CliResult {
   try {
     if (command === 'feature') {
       const query = readOption(args, '--query');
-      if (!query) return fail('invalid_args', 'Usage: tenbo context feature --query "<request>" [--json]', json);
+      if (!query) return misuse('Usage: tenbo context feature --query "<request>" [--json]', json);
       const bundle = resolveFeatureContext(repoRoot, query);
       return serialize(
         bundle,
@@ -27,7 +18,7 @@ export function runContextCli(repoRoot: string, args: string[]): CliResult {
       );
     }
 
-    return fail('invalid_args', 'Usage: tenbo context feature --query "<request>" [--json]', json);
+    return misuse('Usage: tenbo context feature --query "<request>" [--json]', json);
   } catch (err) {
     return handleCliError(err, json);
   }

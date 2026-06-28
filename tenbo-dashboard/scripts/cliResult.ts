@@ -11,15 +11,19 @@ export function ok(stdout: string): CliResult {
   return { stdout, stderr: '', exitCode: 0 };
 }
 
-export function fail(error: string, message: string, json: boolean, retryable = false): CliResult {
+export function fail(error: string, message: string, json: boolean, retryable = false, exitCode = 1): CliResult {
   if (json) {
     return {
       stdout: '',
       stderr: `${JSON.stringify({ ok: false, error, message, retryable })}\n`,
-      exitCode: 1,
+      exitCode,
     };
   }
-  return { stdout: '', stderr: `${message}\n`, exitCode: 1 };
+  return { stdout: '', stderr: `${message}\n`, exitCode };
+}
+
+export function misuse(message: string, json: boolean): CliResult {
+  return fail('invalid_args', message, json, false, 2);
 }
 
 export function serialize(payload: unknown, json: boolean, text: string): CliResult {

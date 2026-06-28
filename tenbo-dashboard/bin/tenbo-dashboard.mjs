@@ -41,9 +41,12 @@ const commands = {
   'init-check': 'scripts/init-check.ts',
   sync: 'scripts/sync.ts',
   archive: 'scripts/archive.ts',
+  'commit-ready': 'scripts/commit-ready.ts',
   item: 'scripts/item.ts',
   items: 'scripts/items.ts',
+  list: 'scripts/items.ts',
   next: 'scripts/next.ts',
+  'work-queue': 'scripts/work-queue.ts',
   context: 'scripts/context.ts',
   hook: 'scripts/hook.ts',
 };
@@ -89,8 +92,13 @@ Usage:
                                    [--evidence "<text>"] [--note "<text>"] [--json]
   tenbo-dashboard item link-commit <id> <sha> [--json]
   tenbo-dashboard items            Query roadmap items [--status <status>]
-                                   [--verification <status>] [--goal <goal>] [--json]
+                                   [--verification <status>] [--goal <goal>]
+                                   [--type <type>] [--priority <p0|p1|p2|p3>]
+                                   [--layer <id>] [--fields <a,b>] [--summary] [--json]
+  tenbo-dashboard list             Alias for items
   tenbo-dashboard next             Show next actionable roadmap items [--json]
+  tenbo-dashboard work-queue       Compact agent task flow [--status <a,b>]
+                                   [--type <type>] [--json]
   tenbo-dashboard context feature  Fetch agent planning context for a natural-language request
                                    --query "<request>" [--json]
   tenbo-dashboard validate         Run validation rules
@@ -102,6 +110,8 @@ Usage:
   tenbo-dashboard hook install     Install opt-in pre-commit validation hook
                                    [--dry-run] [--force]
   tenbo-dashboard hook uninstall   Remove the tenbo pre-commit hook (idempotent)
+  tenbo-dashboard commit-ready     Report branch, diff, validation, and staging gates
+                                   without committing [--json]
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
 

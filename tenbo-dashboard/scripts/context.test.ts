@@ -68,7 +68,7 @@ describe('context CLI', () => {
   it('rejects feature context requests without a query', () => {
     const result = runContextCli(dir, ['feature', '--json']);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
     expect(JSON.parse(result.stderr)).toMatchObject({
       ok: false,
       error: 'invalid_args',

@@ -4,10 +4,12 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   addItemNote,
+  completeItem,
   findItem,
   linkItemCommit,
   listItems,
   listNextItems,
+  setItemDocUpdate,
   setItemStatus,
   setItemVerification,
 } from './roadmapStore';
@@ -117,6 +119,33 @@ describe('roadmapStore', () => {
     const result = linkItemCommit(dir, 'ed-001', '7fc09a5');
 
     expect(result.item.links).toEqual(['commit:7fc09a5']);
+  });
+
+  it('sets doc_update to a date or skipped reason', () => {
+    const dated = setItemDocUpdate(dir, 'ed-001', '2026-06-28');
+    const skipped = setItemDocUpdate(dir, 'ed-001', 'skipped — No docs changed.');
+
+    expect(dated.item.doc_update).toBe('2026-06-28');
+    expect(skipped.item.doc_update).toBe('skipped — No docs changed.');
+  });
+
+  it('completes an item with evidence, doc update, and commit link in one mutation', () => {
+    const result = completeItem(dir, 'ed-001', {
+      evidence: ['npm test -- --run'],
+      docUpdate: '2026-06-28',
+      commit: 'abc123',
+      now: () => new Date('2026-06-28T12:00:00.000Z'),
+    });
+
+    expect(result.item.status).toBe('done');
+    expect(result.item.doc_update).toBe('2026-06-28');
+    expect(result.item.links).toEqual(['commit:abc123']);
+    expect(result.item.notes).toContain('- 2026-06-28: Completed with evidence: npm test -- --run');
+    expect(result.item.verification).toMatchObject({
+      status: 'verified',
+      evidence: ['npm test -- --run'],
+      updated_at: '2026-06-28T12:00:00.000Z',
+    });
   });
 
   it('lists next work in status and priority order', () => {

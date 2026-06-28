@@ -42,4 +42,18 @@ describe('bin output', () => {
     const payload = JSON.parse(result.stdout);
     expect(payload.items[0].item.risks[0]).toHaveLength(12_000);
   });
+
+  it('supports list as an alias for items', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [bin, 'list', '--status', 'done', '--fields', 'id,title,status', '--json'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).items).toEqual([
+      { id: 'ed-001', title: 'Large Output', status: 'done' },
+    ]);
+  });
 });

@@ -564,17 +564,30 @@ package execution.
 
 ```bash
 npx tenbo-dashboard item show <id> --json
+npx tenbo-dashboard item brief <id> --json
+npx tenbo-dashboard item handoff <id> --json
 npx tenbo-dashboard item set-status <id> <now|next|later|done|dropped>
 npx tenbo-dashboard item add-note <id> "<note>"
+npx tenbo-dashboard item doc-update <id> --date today
+npx tenbo-dashboard item complete <id> --evidence "<evidence>" --doc-update today --commit <sha>
+npx tenbo-dashboard item verify <id> --check --json
 npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed> --evidence "<evidence>"
 npx tenbo-dashboard item link-commit <id> <sha>
-npx tenbo-dashboard items --status <status> --verification <verification-status> --json
-npx tenbo-dashboard next --json
+npx tenbo-dashboard items --status <status[,status]> --verification <verification-status> --summary --json
+npx tenbo-dashboard items --type refactor --status next,later --fields id,title,status,priority,layer,verification --json
+npx tenbo-dashboard list --status later --json
+npx tenbo-dashboard next --agent-summary --json
+npx tenbo-dashboard work-queue --type refactor --status now,next,later --json
 npx tenbo-dashboard context feature --query "<user request>" --json
+npx tenbo-dashboard commit-ready --json
 ```
 
-Use direct YAML edits only for operations the CLI does not support yet, such as
-creating a new item or changing rich fields during planning.
+Use `item show` for full detail, `items --summary` / `--fields` for compact
+agent triage, `item brief` before starting a specific item, `item handoff` when
+delegating, and `item complete` for roadmap-only completion hygiene. Use direct
+YAML edits only for operations the CLI does not support yet, such as creating a
+new item, changing rich fields during planning, or multi-file spec/workpad
+archival.
 
 ---
 

@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { runNextCli } from './next';
+import { runWorkQueueCli } from './work-queue';
 
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), 'tenbo-next-cli-'));
+  dir = mkdtempSync(path.join(tmpdir(), 'tenbo-work-queue-cli-'));
   mkdirSync(path.join(dir, '.git'));
   mkdirSync(path.join(dir, '.tenbo/scopes/editor/layers/app'), { recursive: true });
   writeFileSync(path.join(dir, '.tenbo/workspace.yaml'), 'scopes:\n  - id: editor\n    path: apps/editor\n    description: editor scope\ncross_cutting: []\n');
@@ -17,50 +17,48 @@ beforeEach(() => {
   writeFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), [
     'items:',
     '  - id: ed-001',
-    '    title: First',
+    '    title: Active Refactor',
+    '    layer: app',
+    '    status: now',
+    '    type: refactor',
+    '    priority: p2',
+    '    description: active refactor',
+    '    done_when:',
+    '      - Refactor lands.',
+    '    files_to_read:',
+    '      - src/app.ts',
+    '  - id: ed-002',
+    '    title: Later Refactor',
     '    layer: app',
     '    status: later',
-    '    description: first item',
-    '  - id: ed-002',
-    '    title: Second',
-    '    layer: app',
-    '    status: next',
-    '    priority: p0',
-    '    description: second item',
     '    type: refactor',
-    '    done_when:',
-    '      - Next work lands.',
-    '    files_to_read:',
-    '      - src/next.ts',
+    '    priority: p1',
+    '    description: later refactor',
+    '  - id: ed-003',
+    '    title: Later Feature',
+    '    layer: app',
+    '    status: later',
+    '    type: feature',
+    '    description: later feature',
     '',
   ].join('\n'));
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('next CLI', () => {
-  it('returns next work as JSON', () => {
-    const result = runNextCli(dir, ['--json']);
+describe('work-queue CLI', () => {
+  it('returns compact actionable candidates filtered by type and status', () => {
+    const result = runWorkQueueCli(dir, ['--type', 'refactor', '--status', 'now,later', '--json']);
 
     expect(result.exitCode).toBe(0);
     const payload = JSON.parse(result.stdout);
-    expect(payload.items.map((entry: { item: { id: string } }) => entry.item.id)).toEqual(['ed-002']);
-  });
-
-  it('returns compact agent summary for next work', () => {
-    const result = runNextCli(dir, ['--agent-summary', '--json']);
-
-    expect(result.exitCode).toBe(0);
-    const payload = JSON.parse(result.stdout);
-    expect(payload.recommended_sequence).toEqual(['ed-002']);
+    expect(payload).toMatchObject({
+      ok: true,
+      recommended_sequence: ['ed-001', 'ed-002'],
+    });
     expect(payload.items).toEqual([
-      expect.objectContaining({
-        id: 'ed-002',
-        title: 'Second',
-        status: 'next',
-        type: 'refactor',
-        priority: 'p0',
-      }),
+      expect.objectContaining({ id: 'ed-001', title: 'Active Refactor', status: 'now', type: 'refactor' }),
+      expect.objectContaining({ id: 'ed-002', title: 'Later Refactor', status: 'later', type: 'refactor' }),
     ]);
     expect(payload.items[0]).not.toHaveProperty('description');
   });

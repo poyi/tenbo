@@ -1,34 +1,21 @@
 import {
   addItemNote,
+  completeItem,
   findItem,
   linkItemCommit,
+  setItemDocUpdate,
   setItemStatus,
   setItemVerification,
 } from '../src/api/lib/roadmapStore';
-import { fail, handleCliError, isMain, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
-
-function hasFlag(args: string[], flag: string): boolean {
-  return args.includes(flag);
-}
-
-function readOption(args: string[], flag: string): string | undefined {
-  const i = args.indexOf(flag);
-  if (i === -1) return undefined;
-  return args[i + 1];
-}
-
-function readRepeated(args: string[], flag: string): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === flag && args[i + 1]) out.push(args[i + 1]);
-  }
-  return out;
-}
+import { summarizeItem } from '../src/api/lib/itemProjection';
+import { checkItemEvidence } from '../src/api/lib/itemEvidence';
+import { hasFlag, positionalArgs, readOption, readRepeated } from './cliArgs';
+import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
 
 export function runItemCli(repoRoot: string, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
-  const [command, itemId, value] = args.filter((arg) => arg !== '--json');
-  if (!command || !itemId) return fail('invalid_args', 'Usage: tenbo item <show|set-status|add-note|verify|link-commit> <item-id>', json);
+  const [command, itemId, value] = positionalArgs(args);
+  if (!command || !itemId) return misuse('Usage: tenbo item <show|set-status|add-note|verify|link-commit> <item-id>', json);
 
   try {
     if (command === 'show') {
@@ -36,21 +23,77 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       return serialize({ ok: true, scope: located.scopeId, item: located.item }, json, `${itemId}: ${located.item.title} (${located.item.status})\n`);
     }
 
+    if (command === 'brief') {
+      const located = findItem(repoRoot, itemId);
+      const item = located.item;
+      return serialize({
+        ok: true,
+        scope: located.scopeId,
+        item: summarizeItem(located),
+        files_to_read: item.files_to_read ?? [],
+        acceptance_criteria: item.done_when ?? [],
+        risks: item.risks ?? [],
+        verification_commands: [
+          `tenbo-dashboard item verify ${item.id} --check --json`,
+        ],
+        completion_commands: [
+          `tenbo-dashboard item complete ${item.id} --evidence "<evidence>" --doc-update today --json`,
+        ],
+      }, json, `${item.id}: ${item.title} (${item.status})\n`);
+    }
+
+    if (command === 'handoff') {
+      const located = findItem(repoRoot, itemId);
+      const item = located.item;
+      const files = item.files_to_read?.length ? item.files_to_read.map((file) => `- ${file}`).join('\n') : '- Read the linked item/spec first.';
+      const criteria = item.done_when?.length ? item.done_when.map((entry) => `- ${entry}`).join('\n') : '- Satisfy the roadmap item description.';
+      const risks = item.risks?.length ? item.risks.map((entry) => `- ${entry}`).join('\n') : '- No known overlap risks recorded.';
+      const prompt = [
+        `Implement ${item.id}: ${item.title}`,
+        '',
+        'Files to read',
+        files,
+        '',
+        'Non-goals',
+        '- Do not broaden scope beyond this roadmap item.',
+        '- Do not edit unrelated roadmap items or user changes.',
+        '',
+        'Overlap risks',
+        risks,
+        '',
+        'Acceptance criteria',
+        criteria,
+        '',
+        'Verification commands',
+        `- tenbo-dashboard item verify ${item.id} --check --json`,
+        '- Run focused tests for touched code.',
+        '',
+        'Completion rules',
+        `- Use tenbo-dashboard item complete ${item.id} --evidence "<evidence>" --doc-update today --json when the item is actually complete.`,
+        '- Report tests run and any residual risks.',
+      ].join('\n');
+      return serialize({ ok: true, item_id: item.id, scope: located.scopeId, prompt }, json, `${prompt}\n`);
+    }
+
     if (command === 'set-status') {
-      if (!value) return fail('invalid_args', 'Usage: tenbo item set-status <item-id> <status>', json);
+      if (!value) return misuse('Usage: tenbo item set-status <item-id> <status>', json);
       const result = setItemStatus(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} status: ${result.item.status}\n`);
     }
 
     if (command === 'add-note') {
-      if (!value) return fail('invalid_args', 'Usage: tenbo item add-note <item-id> <note>', json);
+      if (!value) return misuse('Usage: tenbo item add-note <item-id> <note>', json);
       const result = addItemNote(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} note added\n`);
     }
 
     if (command === 'verify') {
+      if (hasFlag(args, '--check')) {
+        const report = checkItemEvidence(repoRoot, itemId);
+        return serialize(report, json, `${itemId} evidence: ${report.verdict}\n`);
+      }
       const status = readOption(args, '--status');
-      if (!status) return fail('invalid_args', 'Usage: tenbo item verify <item-id> --status <status> [--evidence <text>] [--note <text>]', json);
+      if (!status) return misuse('Usage: tenbo item verify <item-id> --status <status> [--evidence <text>] [--note <text>]', json);
       const result = setItemVerification(repoRoot, itemId, {
         status,
         evidence: readRepeated(args, '--evidence'),
@@ -59,13 +102,42 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} verification: ${result.item.verification?.status}\n`);
     }
 
+    if (command === 'doc-update') {
+      const date = readOption(args, '--date');
+      const skipped = hasFlag(args, '--skipped');
+      const reason = readOption(args, '--reason');
+      if (!date && !skipped) return misuse('Usage: tenbo item doc-update <item-id> --date <today|YYYY-MM-DD> OR --skipped --reason "<text>"', json);
+      if (skipped && !reason) return misuse('Usage: tenbo item doc-update <item-id> --skipped --reason "<text>"', json);
+      const today = new Date().toISOString().slice(0, 10);
+      const docUpdate = skipped ? `skipped — ${reason}` : date === 'today' ? today : date;
+      const result = setItemDocUpdate(repoRoot, itemId, docUpdate ?? today);
+      return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} doc_update: ${result.item.doc_update}\n`);
+    }
+
+    if (command === 'complete') {
+      const evidence = readRepeated(args, '--evidence');
+      const docUpdateArg = readOption(args, '--doc-update');
+      const commit = readOption(args, '--commit');
+      const verificationStatus = readOption(args, '--verification');
+      if (evidence.length === 0) return misuse('Usage: tenbo item complete <item-id> --evidence "<text>" [--doc-update today|YYYY-MM-DD] [--commit <sha>] [--verification <status>]', json);
+      const today = new Date().toISOString().slice(0, 10);
+      const docUpdate = docUpdateArg === 'today' ? today : docUpdateArg;
+      const result = completeItem(repoRoot, itemId, {
+        evidence,
+        ...(docUpdate ? { docUpdate } : {}),
+        ...(commit ? { commit } : {}),
+        ...(verificationStatus ? { verificationStatus } : {}),
+      });
+      return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} completed\n`);
+    }
+
     if (command === 'link-commit') {
-      if (!value) return fail('invalid_args', 'Usage: tenbo item link-commit <item-id> <sha>', json);
+      if (!value) return misuse('Usage: tenbo item link-commit <item-id> <sha>', json);
       const result = linkItemCommit(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} linked commit: ${value}\n`);
     }
 
-    return fail('invalid_args', `unknown item command: ${command}`, json);
+    return misuse(`unknown item command: ${command}`, json);
   } catch (err) {
     return handleCliError(err, json);
   }

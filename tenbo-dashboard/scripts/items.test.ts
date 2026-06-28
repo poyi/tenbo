@@ -28,7 +28,20 @@ beforeEach(() => {
     '    title: Second',
     '    layer: app',
     '    status: next',
+    '    type: feature',
     '    description: second item',
+    '    notes: |',
+    '      - 2026-06-14: Long implementation note that summary should not dump wholesale.',
+    '  - id: ed-003',
+    '    title: Third',
+    '    layer: app',
+    '    status: later',
+    '    type: refactor',
+    '    priority: p1',
+    '    description: third item',
+    '    verification:',
+    '      status: verified',
+    '      updated_at: 2026-06-15T10:00:00.000Z',
     '',
   ].join('\n'));
 });
@@ -42,5 +55,58 @@ describe('items CLI', () => {
     expect(result.exitCode).toBe(0);
     const payload = JSON.parse(result.stdout);
     expect(payload.items.map((entry: { item: { id: string } }) => entry.item.id)).toEqual(['ed-001']);
+  });
+
+  it('filters by type and comma-separated statuses with selected fields', () => {
+    const result = runItemsCli(dir, [
+      '--type',
+      'refactor',
+      '--status',
+      'next,later',
+      '--fields',
+      'id,title,status,priority,layer,verification',
+      '--json',
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.items).toEqual([
+      {
+        id: 'ed-003',
+        title: 'Third',
+        status: 'later',
+        priority: 'p1',
+        layer: 'app',
+        verification: 'verified',
+      },
+    ]);
+  });
+
+  it('returns compact summaries without changing full JSON by default', () => {
+    const summary = runItemsCli(dir, ['--status', 'next', '--summary', '--json']);
+    const full = runItemsCli(dir, ['--status', 'next', '--json']);
+
+    expect(summary.exitCode).toBe(0);
+    expect(JSON.parse(summary.stdout).items).toEqual([
+      expect.objectContaining({
+        id: 'ed-002',
+        title: 'Second',
+        status: 'next',
+        type: 'feature',
+        layer: 'app',
+      }),
+    ]);
+    expect(JSON.parse(summary.stdout).items[0]).not.toHaveProperty('description');
+    expect(JSON.parse(full.stdout).items[0].item.description).toBe('second item');
+  });
+
+  it('returns misuse errors for invalid status lists and fields', () => {
+    const badStatus = runItemsCli(dir, ['--status', 'next,unknown', '--json']);
+    const badField = runItemsCli(dir, ['--fields', 'id,nope', '--json']);
+
+    expect(badStatus.exitCode).toBe(2);
+    expect(JSON.parse(badStatus.stderr)).toMatchObject({ ok: false, error: 'invalid_args' });
+    expect(badField.exitCode).toBe(2);
+    expect(JSON.parse(badField.stderr)).toMatchObject({ ok: false, error: 'invalid_args' });
   });
 });

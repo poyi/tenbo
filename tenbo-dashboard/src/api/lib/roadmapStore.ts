@@ -6,7 +6,7 @@ import { readState } from './tenboFs';
 import { invalidate as invalidateCache } from './parseCache';
 import { validate } from './validator';
 import { comparePriority } from './priority';
-import type { Item, Status, VerificationStatus, ValidateResult } from '../../types';
+import type { Item, Priority, Status, VerificationStatus, ValidateResult } from '../../types';
 
 export type RoadmapErrorCode = 'not_found' | 'conflict' | 'invalid_status' | 'invalid_args';
 
@@ -36,9 +36,12 @@ export interface WriteResult {
 }
 
 export interface ListItemFilters {
-  status?: Status;
+  status?: Status | Status[];
   verification?: VerificationStatus;
   goal?: string;
+  type?: Item['type'];
+  priority?: Priority;
+  layer?: string;
 }
 
 interface RoadmapFileRef {
@@ -120,6 +123,19 @@ function validateVerificationStatus(status: string): VerificationStatus {
   throw new RoadmapStoreError('invalid_status', `invalid verification status: ${status}`);
 }
 
+function normalizeNotes(notes: unknown): string {
+  if (!notes) return '';
+  if (typeof notes === 'string') return notes.trimEnd();
+  if (Array.isArray(notes)) {
+    return notes
+      .map((entry) => String(entry).trim())
+      .filter(Boolean)
+      .map((entry) => entry.startsWith('- ') ? entry : `- ${entry}`)
+      .join('\n');
+  }
+  return String(notes).trimEnd();
+}
+
 function mutateItem(
   repoRoot: string,
   itemId: string,
@@ -178,7 +194,8 @@ export function addItemNote(
   const now = opts.now ?? (() => new Date());
   const date = now().toISOString().slice(0, 10);
   return mutateItem(repoRoot, itemId, (item) => {
-    const prefix = item.notes && item.notes.trim().length > 0 ? `${item.notes.trimEnd()}\n` : '';
+    const existing = normalizeNotes(item.notes);
+    const prefix = existing.length > 0 ? `${existing}\n` : '';
     return { notes: `${prefix}- ${date}: ${note}` };
   }, opts);
 }
@@ -213,12 +230,58 @@ export function linkItemCommit(repoRoot: string, itemId: string, commit: string,
   }, opts);
 }
 
+export function setItemDocUpdate(repoRoot: string, itemId: string, docUpdate: string, opts?: MutationOptions): WriteResult {
+  return mutateItem(repoRoot, itemId, () => ({ doc_update: docUpdate }), opts);
+}
+
+export function completeItem(
+  repoRoot: string,
+  itemId: string,
+  opts: MutationOptions & {
+    evidence: string[];
+    docUpdate?: string;
+    commit?: string;
+    verificationStatus?: VerificationStatus | string;
+    now?: () => Date;
+  },
+): WriteResult {
+  const now = opts.now ?? (() => new Date());
+  const date = now().toISOString().slice(0, 10);
+  const updatedAt = now().toISOString();
+  const status = validateVerificationStatus(opts.verificationStatus ?? 'verified');
+  return mutateItem(repoRoot, itemId, (item) => {
+    const existingNotes = normalizeNotes(item.notes);
+    const evidenceText = opts.evidence.length ? opts.evidence.join('; ') : 'No evidence supplied';
+    const note = `- ${date}: Completed with evidence: ${evidenceText}`;
+    const links = item.links ?? [];
+    const commitLink = opts.commit ? `commit:${opts.commit}` : undefined;
+    return {
+      status: 'done',
+      notes: existingNotes ? `${existingNotes}\n${note}` : note,
+      verification: {
+        status,
+        updated_at: updatedAt,
+        ...(opts.evidence.length ? { evidence: opts.evidence } : {}),
+      },
+      ...(opts.docUpdate ? { doc_update: opts.docUpdate } : {}),
+      ...(commitLink ? { links: links.includes(commitLink) ? links : [...links, commitLink] } : {}),
+    };
+  }, opts);
+}
+
 export function listItems(repoRoot: string, filters: ListItemFilters = {}): LocatedItem[] {
   const out: LocatedItem[] = [];
+  const statuses = Array.isArray(filters.status) ? filters.status : filters.status ? [filters.status] : [];
   for (const ref of readRoadmapRefs(repoRoot)) {
     for (const item of ref.items) {
-      if (filters.status && item.status !== filters.status) continue;
+      if (statuses.length > 0 && !statuses.includes(item.status)) continue;
       if (filters.verification && item.verification?.status !== filters.verification) continue;
+      if (filters.type && item.type !== filters.type) continue;
+      if (filters.priority && item.priority !== filters.priority) continue;
+      if (filters.layer) {
+        const layerRefs = [item.layer, ...(item.layers ?? []), ...(item.affects ?? [])].filter(Boolean);
+        if (!layerRefs.includes(filters.layer)) continue;
+      }
       if (filters.goal) {
         const goalRef = item.goal_ref;
         const matchesGoal = Array.isArray(goalRef) ? goalRef.includes(filters.goal) : goalRef === filters.goal;
