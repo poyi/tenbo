@@ -56,4 +56,19 @@ describe('bin output', () => {
       { id: 'ed-001', title: 'Large Output', status: 'done' },
     ]);
   });
+
+  it('prints items help without running the query', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [bin, 'items', '--help'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Usage: tenbo-dashboard items');
+    expect(result.stdout).toContain('--fields <a,b>');
+    expect(result.stdout).not.toContain('ed-001');
+  });
 });

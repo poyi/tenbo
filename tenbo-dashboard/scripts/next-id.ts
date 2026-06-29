@@ -27,7 +27,7 @@
  *   decoration so callers can capture it via `$(...)`. Errors go to stderr
  *   and the process exits non-zero.
  */
-import { readFileSync, existsSync, mkdirSync, readdirSync, writeFileSync, statSync, unlinkSync, openSync, closeSync, writeSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, statSync, unlinkSync, openSync, closeSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { findRepoRoot } from '../src/api/lib/repoRoot';
@@ -39,10 +39,6 @@ interface WorkspaceScope {
   id: string;
   prefix?: string;
   path?: string;
-}
-
-interface RoadmapFile {
-  items?: Array<{ id?: string }>;
 }
 
 /** Find which roadmap.yaml files contain ids for this prefix. */

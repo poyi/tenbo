@@ -82,6 +82,26 @@ describe('items CLI', () => {
     ]);
   });
 
+  it('includes goal_ref in selected compact fields', () => {
+    writeFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), [
+      'items:',
+      '  - id: ed-001',
+      '    title: First',
+      '    layer: app',
+      '    status: next',
+      '    description: first item',
+      '    goal_ref: [g1, g2]',
+      '',
+    ].join('\n'));
+
+    const result = runItemsCli(dir, ['--fields', 'id,title,goal_ref', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).items).toEqual([
+      { id: 'ed-001', title: 'First', goal_ref: ['g1', 'g2'] },
+    ]);
+  });
+
   it('returns compact summaries without changing full JSON by default', () => {
     const summary = runItemsCli(dir, ['--status', 'next', '--summary', '--json']);
     const full = runItemsCli(dir, ['--status', 'next', '--json']);

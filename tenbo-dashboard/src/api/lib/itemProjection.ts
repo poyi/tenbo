@@ -10,6 +10,7 @@ export interface ItemSummaryRecord {
   layers?: string[];
   type?: Item['type'];
   priority?: Priority;
+  goal_ref?: Item['goal_ref'];
   verification?: VerificationStatus;
   risk_count?: number;
   done_when_count?: number;
@@ -25,6 +26,7 @@ export const ITEM_FIELD_NAMES = [
   'layers',
   'type',
   'priority',
+  'goal_ref',
   'verification',
   'risk_count',
   'done_when_count',
@@ -60,6 +62,7 @@ export function summarizeItem(entry: LocatedItem): ItemSummaryRecord {
     ...(item.layers ? { layers: item.layers } : {}),
     ...(item.type ? { type: item.type } : {}),
     ...(item.priority ? { priority: item.priority } : {}),
+    ...(item.goal_ref ? { goal_ref: item.goal_ref } : {}),
     ...(item.verification?.status ? { verification: item.verification.status } : {}),
     ...(item.risks ? { risk_count: item.risks.length } : {}),
     ...(item.done_when ? { done_when_count: item.done_when.length } : {}),

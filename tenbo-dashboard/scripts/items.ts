@@ -1,9 +1,11 @@
 import { listItems, type ListItemFilters } from '../src/api/lib/roadmapStore';
 import { parseItemFields, projectItem, summarizeItem } from '../src/api/lib/itemProjection';
 import { hasFlag, readOption } from './cliArgs';
-import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { handleCliError, isMain, misuse, ok, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
 
 const STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
+const USAGE = `Usage: tenbo-dashboard items [--status <status[,status]>] [--verification <status>] [--goal <goal>] [--type <type>] [--priority <p0|p1|p2|p3>] [--layer <id>] [--fields <a,b>] [--summary] [--json]
+`;
 
 function readStatusFilter(value: string | undefined): ListItemFilters['status'] {
   if (!value) return undefined;
@@ -49,7 +51,8 @@ export function runItemsCli(repoRoot: string, args: string[]): CliResult {
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
-    runMain(fail('invalid_args', 'Usage: tenbo items [--status <status>] [--verification <status>] [--goal <goal>] [--json]', false));
+    runMain(ok(USAGE));
+  } else {
+    runMain(runItemsCli(repoRootFromCwd(), args));
   }
-  runMain(runItemsCli(repoRootFromCwd(), args));
 }
