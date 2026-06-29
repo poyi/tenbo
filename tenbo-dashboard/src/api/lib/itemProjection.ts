@@ -1,5 +1,6 @@
 import type { Item, Priority, Status, VerificationStatus } from '../../types';
 import type { LocatedItem } from './roadmapStore';
+import { normalizeNotes } from './notes';
 
 export interface ItemSummaryRecord {
   id: string;
@@ -45,9 +46,10 @@ export function parseItemFields(value: string): ItemFieldName[] {
   return fields as ItemFieldName[];
 }
 
-function latestNote(notes: string | undefined): string | undefined {
-  if (!notes) return undefined;
-  const lines = notes.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+function latestNote(notes: unknown): string | undefined {
+  const normalized = normalizeNotes(notes);
+  if (!normalized) return undefined;
+  const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return lines.at(-1)?.replace(/^- /, '');
 }
 

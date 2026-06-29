@@ -64,4 +64,29 @@ describe('next CLI', () => {
     ]);
     expect(payload.items[0]).not.toHaveProperty('description');
   });
+
+  it('returns agent summaries when notes are YAML sequences', () => {
+    writeFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), [
+      'items:',
+      '  - id: ed-001',
+      '    title: First',
+      '    layer: app',
+      '    status: next',
+      '    description: first item',
+      '    notes:',
+      '      - First note',
+      '      - Latest list note',
+      '',
+    ].join('\n'));
+
+    const result = runNextCli(dir, ['--agent-summary', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).items).toEqual([
+      expect.objectContaining({
+        id: 'ed-001',
+        latest_note: 'Latest list note',
+      }),
+    ]);
+  });
 });

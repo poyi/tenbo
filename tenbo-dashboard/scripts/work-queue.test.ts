@@ -62,4 +62,30 @@ describe('work-queue CLI', () => {
     ]);
     expect(payload.items[0]).not.toHaveProperty('description');
   });
+
+  it('returns compact work queue items when notes are YAML sequences', () => {
+    writeFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), [
+      'items:',
+      '  - id: ed-001',
+      '    title: Active Refactor',
+      '    layer: app',
+      '    status: now',
+      '    type: refactor',
+      '    description: active refactor',
+      '    notes:',
+      '      - First note',
+      '      - Latest list note',
+      '',
+    ].join('\n'));
+
+    const result = runWorkQueueCli(dir, ['--type', 'refactor', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).items).toEqual([
+      expect.objectContaining({
+        id: 'ed-001',
+        latest_note: 'Latest list note',
+      }),
+    ]);
+  });
 });

@@ -6,6 +6,7 @@ import { readState } from './tenboFs';
 import { invalidate as invalidateCache } from './parseCache';
 import { validate } from './validator';
 import { comparePriority } from './priority';
+import { normalizeNotes } from './notes';
 import type { Item, Priority, Status, VerificationStatus, ValidateResult } from '../../types';
 
 export type RoadmapErrorCode = 'not_found' | 'conflict' | 'invalid_status' | 'invalid_args';
@@ -121,19 +122,6 @@ function validateStatus(status: string): Status {
 function validateVerificationStatus(status: string): VerificationStatus {
   if ((VERIFICATION_STATUSES as readonly string[]).includes(status)) return status as VerificationStatus;
   throw new RoadmapStoreError('invalid_status', `invalid verification status: ${status}`);
-}
-
-function normalizeNotes(notes: unknown): string {
-  if (!notes) return '';
-  if (typeof notes === 'string') return notes.trimEnd();
-  if (Array.isArray(notes)) {
-    return notes
-      .map((entry) => String(entry).trim())
-      .filter(Boolean)
-      .map((entry) => entry.startsWith('- ') ? entry : `- ${entry}`)
-      .join('\n');
-  }
-  return String(notes).trimEnd();
 }
 
 function mutateItem(
