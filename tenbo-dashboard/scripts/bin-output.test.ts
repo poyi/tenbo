@@ -30,6 +30,19 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('bin output', () => {
+  it('lists item completion in top-level help', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [bin, 'help'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('tenbo-dashboard item complete <id>');
+  });
+
   it('flushes large JSON output before exiting', () => {
     const bin = path.resolve('bin/tenbo-dashboard.mjs');
     const result = spawnSync(process.execPath, [bin, 'items', '--status', 'done', '--json'], {
@@ -70,5 +83,71 @@ describe('bin output', () => {
     expect(result.stdout).toContain('Usage: tenbo-dashboard items');
     expect(result.stdout).toContain('--fields <a,b>');
     expect(result.stdout).not.toContain('ed-001');
+  });
+
+  it('prints item help without requiring an item id', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [bin, 'item', '--help'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Usage: tenbo-dashboard item <command> <id>');
+    expect(result.stdout).toContain('complete');
+    expect(result.stdout).toContain('link-commit');
+    expect(result.stdout).not.toContain('ed-001');
+  });
+
+  it('prints item complete help without requiring an item id', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [bin, 'item', 'complete', '--help'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Usage: tenbo-dashboard item complete <id>');
+    expect(result.stdout).toContain('--doc-update today|YYYY-MM-DD');
+    expect(result.stdout).toContain('--commit <sha>');
+  });
+
+  it('completes status, doc_update, verification, and commit through the bin wrapper', () => {
+    const bin = path.resolve('bin/tenbo-dashboard.mjs');
+    const result = spawnSync(process.execPath, [
+      bin,
+      'item',
+      'complete',
+      'ed-001',
+      '--evidence',
+      'npm test -- --run',
+      '--doc-update',
+      'today',
+      '--commit',
+      'abc123',
+      '--json',
+    ], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    const today = new Date().toISOString().slice(0, 10);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    const payload = JSON.parse(result.stdout);
+    expect(payload.item).toMatchObject({
+      status: 'done',
+      doc_update: today,
+      links: ['commit:abc123'],
+      verification: {
+        status: 'verified',
+        evidence: ['npm test -- --run'],
+      },
+    });
   });
 });

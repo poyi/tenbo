@@ -10,12 +10,28 @@ import {
 import { summarizeItem } from '../src/api/lib/itemProjection';
 import { checkItemEvidence } from '../src/api/lib/itemEvidence';
 import { hasFlag, positionalArgs, readOption, readRepeated } from './cliArgs';
-import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { handleCliError, isMain, misuse, ok, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { findItemCommand, formatItemCommandHelp, formatItemHelp } from './itemCommandRegistry.mjs';
 
 export function runItemCli(repoRoot: string, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
   const [command, itemId, value] = positionalArgs(args);
-  if (!command || !itemId) return misuse('Usage: tenbo item <show|set-status|add-note|verify|link-commit> <item-id>', json);
+
+  if (hasFlag(args, '--help') || command === 'help') {
+    const helpCommand = command === 'help' ? itemId : command;
+    if (helpCommand) {
+      const help = formatItemCommandHelp(helpCommand);
+      if (help) return ok(help);
+      return misuse(`unknown item command: ${helpCommand}`, json);
+    }
+    return ok(formatItemHelp());
+  }
+
+  if (!command) return misuse(formatItemHelp().trimEnd(), json);
+  if (!itemId) {
+    const definition = findItemCommand(command);
+    return misuse(definition ? `Usage: ${definition.usage}` : `unknown item command: ${command}`, json);
+  }
 
   try {
     if (command === 'show') {
@@ -76,13 +92,13 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
     }
 
     if (command === 'set-status') {
-      if (!value) return misuse('Usage: tenbo item set-status <item-id> <status>', json);
+      if (!value) return misuse(`Usage: ${findItemCommand('set-status')?.usage ?? 'tenbo-dashboard item set-status <id> <status>'}`, json);
       const result = setItemStatus(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} status: ${result.item.status}\n`);
     }
 
     if (command === 'add-note') {
-      if (!value) return misuse('Usage: tenbo item add-note <item-id> <note>', json);
+      if (!value) return misuse(`Usage: ${findItemCommand('add-note')?.usage ?? 'tenbo-dashboard item add-note <id> <note>'}`, json);
       const result = addItemNote(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} note added\n`);
     }
@@ -93,7 +109,7 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
         return serialize(report, json, `${itemId} evidence: ${report.verdict}\n`);
       }
       const status = readOption(args, '--status');
-      if (!status) return misuse('Usage: tenbo item verify <item-id> --status <status> [--evidence <text>] [--note <text>]', json);
+      if (!status) return misuse(`Usage: ${findItemCommand('verify')?.usage ?? 'tenbo-dashboard item verify <id> --status <status>'}`, json);
       const result = setItemVerification(repoRoot, itemId, {
         status,
         evidence: readRepeated(args, '--evidence'),
@@ -106,8 +122,8 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       const date = readOption(args, '--date');
       const skipped = hasFlag(args, '--skipped');
       const reason = readOption(args, '--reason');
-      if (!date && !skipped) return misuse('Usage: tenbo item doc-update <item-id> --date <today|YYYY-MM-DD> OR --skipped --reason "<text>"', json);
-      if (skipped && !reason) return misuse('Usage: tenbo item doc-update <item-id> --skipped --reason "<text>"', json);
+      if (!date && !skipped) return misuse(`Usage: ${findItemCommand('doc-update')?.usage ?? 'tenbo-dashboard item doc-update <id> --date <today|YYYY-MM-DD>'}`, json);
+      if (skipped && !reason) return misuse('Usage: tenbo-dashboard item doc-update <id> --skipped --reason "<text>"', json);
       const today = new Date().toISOString().slice(0, 10);
       const docUpdate = skipped ? `skipped — ${reason}` : date === 'today' ? today : date;
       const result = setItemDocUpdate(repoRoot, itemId, docUpdate ?? today);
@@ -119,7 +135,7 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       const docUpdateArg = readOption(args, '--doc-update');
       const commit = readOption(args, '--commit');
       const verificationStatus = readOption(args, '--verification');
-      if (evidence.length === 0) return misuse('Usage: tenbo item complete <item-id> --evidence "<text>" [--doc-update today|YYYY-MM-DD] [--commit <sha>] [--verification <status>]', json);
+      if (evidence.length === 0) return misuse(`Usage: ${findItemCommand('complete')?.usage ?? 'tenbo-dashboard item complete <id> --evidence "<text>"'}`, json);
       const today = new Date().toISOString().slice(0, 10);
       const docUpdate = docUpdateArg === 'today' ? today : docUpdateArg;
       const result = completeItem(repoRoot, itemId, {
@@ -132,7 +148,7 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
     }
 
     if (command === 'link-commit') {
-      if (!value) return misuse('Usage: tenbo item link-commit <item-id> <sha>', json);
+      if (!value) return misuse(`Usage: ${findItemCommand('link-commit')?.usage ?? 'tenbo-dashboard item link-commit <id> <sha>'}`, json);
       const result = linkItemCommit(repoRoot, itemId, value);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} linked commit: ${value}\n`);
     }

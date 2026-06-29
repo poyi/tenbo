@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { topLevelItemHelpLines } from '../scripts/itemCommandRegistry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -85,12 +86,7 @@ Usage:
   tenbo-dashboard                  Launch the dashboard (http://localhost:5174)
   tenbo-dashboard serve            Same as bare invocation (also: 'start', 'dev')
   tenbo-dashboard sync             Refresh tenbo state after a change (metrics + init-check + validate, surfaces new findings)
-  tenbo-dashboard item show <id> [--json]
-  tenbo-dashboard item set-status <id> <now|next|later|done|dropped> [--json]
-  tenbo-dashboard item add-note <id> "<note>" [--json]
-  tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed>
-                                   [--evidence "<text>"] [--note "<text>"] [--json]
-  tenbo-dashboard item link-commit <id> <sha> [--json]
+${topLevelItemHelpLines().join('\n')}
   tenbo-dashboard items            Query roadmap items [--status <status>]
                                    [--verification <status>] [--goal <goal>]
                                    [--type <type>] [--priority <p0|p1|p2|p3>]
