@@ -54,6 +54,7 @@ export function analyzeDeadCode(
       details: {
         kind: 'dead-code',
         exports: [],
+        exported_symbols: graph.exportsFrom(rel),
         last_imported_commit: null,
         git_age_days: 0,
         repo_static_importers: importers,

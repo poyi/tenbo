@@ -31,11 +31,16 @@ export interface Suggestion {
   action_kind: ActionKind;
 }
 
+export interface GraphEvidence {
+  mode: 'fresh-index' | 'rebuilt-index' | 'fallback';
+  index_status: string;
+}
+
 // Signal-specific details payloads (discriminated union)
 export type FindingDetails =
   | { kind: 'hotspot-files'; loc: number; top_functions: { name: string; loc: number }[]; commits_30d: number; split_candidates: string[] }
-  | { kind: 'dead-code'; exports: string[]; last_imported_commit: string | null; git_age_days: number; repo_static_importers: string[]; static_import_evidence: string }
-  | { kind: 'coupling'; source_file: string; target_file: string; import_lines: number[]; crosses_public_api: boolean }
+  | { kind: 'dead-code'; exports: string[]; exported_symbols: string[]; last_imported_commit: string | null; git_age_days: number; repo_static_importers: string[]; static_import_evidence: string; graph_evidence?: GraphEvidence }
+  | { kind: 'coupling'; source_file: string; target_file: string; source_layer: string; target_layer: string; importer_count: number; import_lines: number[]; crosses_public_api: boolean; graph_evidence?: GraphEvidence }
   | { kind: 'doc-drift'; drift_type: 'missing-ref' | 'unreferenced-file' | 'stale-section'; doc_path: string; doc_mtime_iso: string | null; code_mtime_iso: string | null; affected_files: string[] }
   | { kind: 'test-coverage'; suggested_test_path: string }
   | { kind: 'aging-todos'; line: number; age_days: number; commit_hash: string; author: string; text: string; context: string }

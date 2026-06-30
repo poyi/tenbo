@@ -62,6 +62,29 @@ describe('context CLI', () => {
         layers: ['cli-tools'],
       },
     });
+    expect(payload.context.read_plan).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: '.tenbo/overview.md',
+        kind: 'product',
+        priority: 1,
+      }),
+      expect.objectContaining({
+        path: '.tenbo/scopes/dashboard/layers/cli-tools/intent.md',
+        kind: 'layer-intent',
+      }),
+    ]));
+    expect(payload.context.verification_plan).toEqual([
+      {
+        command: 'node tenbo-dashboard/bin/tenbo-dashboard.mjs validate --json',
+        purpose: 'Check Tenbo roadmap and documentation structure',
+        when: 'after changing .tenbo files',
+      },
+      {
+        command: 'cd tenbo-dashboard && npm test -- --run',
+        purpose: 'Run dashboard and CLI unit tests',
+        when: 'after changing dashboard code',
+      },
+    ]);
     expect(payload.roadmap.matching_items.map((entry: { item: { id: string } }) => entry.item.id)).toEqual(['td-010']);
   });
 

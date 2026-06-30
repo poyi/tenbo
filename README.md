@@ -60,6 +60,13 @@ Same `.tenbo/` data on disk works for every supported editor — a project set u
 
 That's it. Open your editor in a project and ask: **"set up tenbo"**.
 
+### Optional agent context reminders
+
+Tenbo can print a short advisory reminder for agent session-start hooks:
+`npx tenbo-dashboard reminder print`. This is guidance only. It does not block
+tool calls, does not intercept file reads, and is not installed automatically.
+Use your agent's hook system only if you want this reminder in every session.
+
 ### Manual install (if you'd rather not curl-pipe a script)
 
 The installer just runs `git clone` + `cp -r` under the hood. If you'd rather do it by hand:

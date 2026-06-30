@@ -1,20 +1,20 @@
 import type { Item, Scope } from '../../../types';
 import type { Finding, Signal } from './types';
 import type { HealthConfig } from './config';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
 import { resolveLayerFiles } from './layerFiles';
 import { analyzeHotspotFiles } from './hotspotFiles';
 import { analyzeAgingTodos } from './agingTodos';
 import { analyzeDocDrift } from './docDrift';
 import { analyzeTestCoverage } from './testCoverage';
 import { analyzeArchCompliance } from './archCompliance';
-import { buildImportGraph } from './importGraph';
+import { graphFromSourceIndex } from './structuralGraph';
 import type { ImportGraph } from './importGraph';
 import { analyzeDeadCode } from './deadCode';
 import { analyzeCoupling } from './coupling';
 import { analyzeRedundancy } from './redundancy';
 import { analyzeAgingSuperseded } from './agingSuperseded';
+import { checkSourceIndexFreshness, readSourceIndex } from '../sourceIndex/store';
+import type { GraphEvidence } from './types';
 
 interface AnalyzerArgs {
   repoRoot: string;
@@ -39,58 +39,15 @@ const ANALYZERS: Record<Signal, AnalyzerFn | null> = {
   'redundancy':               null, // Phase 4
 };
 
-const SOURCE_EXT_RE = /\.tsx?$/;
-const IGNORED_SOURCE_DIRS = new Set([
-  '.git',
-  '.tenbo',
-  'node_modules',
-  'dist',
-  'build',
-  'coverage',
-  '.next',
-  '.turbo',
-  'out',
-]);
-
-function collectScopeSourceFiles(repoRoot: string, scopePath: string, seedFiles: string[]): string[] {
-  const sourceFiles = new Set(seedFiles.filter(f => SOURCE_EXT_RE.test(f)));
-  const root = path.resolve(repoRoot, scopePath || '.');
-  if (!existsSync(root)) return Array.from(sourceFiles).sort();
-
-  function walk(dir: string) {
-    let entries: string[];
-    try { entries = readdirSync(dir); } catch { return; }
-    for (const entry of entries.sort()) {
-      if (IGNORED_SOURCE_DIRS.has(entry)) continue;
-      const full = path.join(dir, entry);
-      let st;
-      try { st = statSync(full); } catch { continue; }
-      if (st.isDirectory()) {
-        walk(full);
-      } else if (SOURCE_EXT_RE.test(entry) && !entry.endsWith('.d.ts')) {
-        sourceFiles.add(path.relative(repoRoot, full).split(path.sep).join('/'));
-      }
-    }
-  }
-  walk(root);
-  return Array.from(sourceFiles).sort();
-}
-
-function tsConfigForScope(repoRoot: string, scopePath: string): string | undefined {
-  const scoped = path.join(repoRoot, scopePath || '.', 'tsconfig.json');
-  if (existsSync(scoped)) return scoped;
-  const root = path.join(repoRoot, 'tsconfig.json');
-  return existsSync(root) ? root : undefined;
-}
-
 export async function collectAll(repoRoot: string, scope: Scope, config: HealthConfig, allItems?: Map<string, Item>): Promise<Finding[]> {
   const filesByLayer = resolveLayerFiles(repoRoot, scope);
-  const allTsFiles = collectScopeSourceFiles(repoRoot, scope.path, Object.values(filesByLayer).flat());
   let graph: ImportGraph | undefined;
-  try {
-    graph = buildImportGraph(repoRoot, allTsFiles, { tsConfigFilePath: tsConfigForScope(repoRoot, scope.path) });
-  } catch {
-    // No tsconfig or build error — skip import-graph dependent analyzers
+  let graphEvidence: GraphEvidence | undefined;
+  const sourceIndex = readSourceIndex(repoRoot);
+  const indexFreshness = checkSourceIndexFreshness(repoRoot, sourceIndex);
+  if (indexFreshness.status === 'fresh' && sourceIndex) {
+    graph = graphFromSourceIndex(sourceIndex, scope.id);
+    graphEvidence = { mode: 'fresh-index', index_status: indexFreshness.status };
   }
   const out: Finding[] = [];
   for (const layer of scope.layers) {
@@ -100,7 +57,8 @@ export async function collectAll(repoRoot: string, scope: Scope, config: HealthC
       if (!fn) continue;
       if (opted.has(signal)) continue;
       try {
-        out.push(...fn({ repoRoot, scopeId: scope.id, scopePath: scope.path, layerId: layer.id, files, config, graph }));
+        const findings = fn({ repoRoot, scopeId: scope.id, scopePath: scope.path, layerId: layer.id, files, config, graph });
+        out.push(...decorateGraphEvidence(findings, graphEvidence));
       } catch (e) {
         // Analyzer failures don't break the whole report. Log and continue.
         console.error(`[health] analyzer ${signal} failed for layer ${layer.id}:`, e);
@@ -112,7 +70,7 @@ export async function collectAll(repoRoot: string, scope: Scope, config: HealthC
     try {
       const couplingFindings = analyzeCoupling(filesByLayer, graph)
         .filter(f => !(config.ignore.layer_signals[f.layer] ?? []).includes('coupling'));
-      out.push(...couplingFindings);
+      out.push(...decorateGraphEvidence(couplingFindings, graphEvidence));
     } catch (e) {
       console.error('[health] analyzer coupling failed:', e);
     }
@@ -134,4 +92,18 @@ export async function collectAll(repoRoot: string, scope: Scope, config: HealthC
   }
 
   return out;
+}
+
+function decorateGraphEvidence(findings: Finding[], evidence: GraphEvidence | undefined): Finding[] {
+  if (!evidence) return findings;
+  return findings.map((finding) => {
+    if (finding.signal !== 'dead-code' && finding.signal !== 'coupling') return finding;
+    return {
+      ...finding,
+      details: {
+        ...finding.details,
+        graph_evidence: evidence,
+      },
+    } as Finding;
+  });
 }

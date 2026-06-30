@@ -14,6 +14,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { findRepoRoot } from '../src/api/lib/repoRoot';
 import { runComputeMetrics } from './compute-metrics';
 import { runInitCheck } from './init-check';
@@ -47,6 +49,58 @@ interface SyncArgs {
   scope?: string; // single-scope refresh; omit to refresh all
 }
 
+export interface IndexRefreshResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+const DEFAULT_INDEX_BUDGET_MS = 3000;
+
+function dashboardBinPath(): string {
+  const here = new URL(import.meta.url);
+  if (here.protocol === 'file:') return fileURLToPath(new URL('../bin/tenbo-dashboard.mjs', here));
+  return path.resolve(process.cwd(), 'bin/tenbo-dashboard.mjs');
+}
+
+type SpawnSyncFn = typeof spawnSync;
+
+export function runIndexRefreshForSync(
+  repoRoot: string,
+  budgetMs = DEFAULT_INDEX_BUDGET_MS,
+  spawn: SpawnSyncFn = spawnSync,
+): IndexRefreshResult {
+  const binPath = dashboardBinPath();
+  const child = spawn(process.execPath, [binPath, 'index', '--if-stale', '--json'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    timeout: budgetMs,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  if (child.error) {
+    const code = (child.error as NodeJS.ErrnoException).code;
+    if (code === 'ETIMEDOUT') {
+      return {
+        exitCode: 0,
+        stdout: child.stdout ?? '',
+        stderr: `sync: source index refresh timed out after ${budgetMs}ms; continuing without fresh index\n`,
+      };
+    }
+    return {
+      exitCode: 1,
+      stdout: child.stdout ?? '',
+      stderr: child.stderr || `${child.error.message}\n`,
+    };
+  }
+
+  return {
+    exitCode: child.status ?? (child.signal ? 1 : 0),
+    stdout: child.stdout ?? '',
+    stderr: child.stderr ?? '',
+  };
+}
+
 export async function runSync(args: SyncArgs): Promise<number> {
   const { repoRoot, scope } = args;
 
@@ -59,7 +113,14 @@ export async function runSync(args: SyncArgs): Promise<number> {
     for (const f of m?.findings ?? []) priorFindingKeys.add(findingKey(id, f));
   }
 
-  // 1. metrics
+  // 1. source index (fail-open; metrics can still refresh without graph findings)
+  const indexResult = runIndexRefreshForSync(repoRoot);
+  if (indexResult.stderr) process.stderr.write(indexResult.stderr);
+  if (indexResult.exitCode !== 0) {
+    process.stderr.write('sync: source index refresh failed-open; continuing without fresh index\n');
+  }
+
+  // 2. metrics
   const metricsCode = await runComputeMetrics({
     repoRoot,
     all: !scope,
@@ -70,7 +131,7 @@ export async function runSync(args: SyncArgs): Promise<number> {
     return 1;
   }
 
-  // 2. init-check
+  // 3. init-check
   const { defects } = runInitCheck(repoRoot);
   if (defects.length > 0) {
     process.stderr.write(`sync: init-check FAILED — ${defects.length} init defect(s):\n`);
@@ -81,7 +142,7 @@ export async function runSync(args: SyncArgs): Promise<number> {
     return 1;
   }
 
-  // 3. validate (re-read state after metrics may have changed scope dirs)
+  // 4. validate (re-read state after metrics may have changed scope dirs)
   const stateAfter = readState(repoRoot);
   const result = validate(stateAfter);
   if (result.errors.length > 0) {
@@ -90,7 +151,7 @@ export async function runSync(args: SyncArgs): Promise<number> {
     return 1;
   }
 
-  // 4. Diff findings: surface NEW critical/warning findings introduced this run.
+  // 5. Diff findings: surface NEW critical/warning findings introduced this run.
   const newFindings: NewFinding[] = [];
   for (const id of targetScopes) {
     const m = readMetrics(path.join(repoRoot, '.tenbo', 'scopes', id, 'metrics.json'));
@@ -107,7 +168,7 @@ export async function runSync(args: SyncArgs): Promise<number> {
     }
   }
 
-  // 5. Summary line + (optional) new-finding lines.
+  // 6. Summary line + (optional) new-finding lines.
   const scopeLabel = scope ? `scope "${scope}"` : `${targetScopes.length} scope(s)`;
   if (newFindings.length === 0) {
     process.stdout.write(`sync: ${scopeLabel} fresh. No new errors, no new warning/critical findings.\n`);

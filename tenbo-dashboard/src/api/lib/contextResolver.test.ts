@@ -146,6 +146,29 @@ describe('contextResolver', () => {
     expect(bundle.roadmap.matching_items.find((entry) => entry.item.id === 'td-010')?.item).not.toHaveProperty('risks');
     expect(bundle.context.layer_docs).toContain('.tenbo/scopes/skill/layers/core-logic/intent.md');
     expect(bundle.context.files_to_read).toContain('SKILL.md');
+    expect(bundle.context.read_plan).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: '.tenbo/overview.md',
+        kind: 'product',
+        reason: expect.stringContaining('goals'),
+        priority: 1,
+      }),
+      expect.objectContaining({
+        path: '.tenbo/scopes/skill/layers/core-logic/intent.md',
+        kind: 'layer-intent',
+      }),
+      expect.objectContaining({
+        path: 'SKILL.md',
+        kind: 'source-file',
+      }),
+    ]));
+    expect(bundle.context.read_plan.filter((entry) => entry.path === '.tenbo/overview.md')).toHaveLength(1);
+    expect(bundle.context.read_plan.length).toBeLessThanOrEqual(12);
+    expect(bundle.context.verification_plan).toContainEqual({
+      command: 'node tenbo-dashboard/bin/tenbo-dashboard.mjs validate --json',
+      purpose: 'Check Tenbo roadmap and documentation structure',
+      when: 'after changing .tenbo files',
+    });
     expect(bundle.warnings).toContainEqual(expect.objectContaining({ kind: 'stale_agent_context' }));
   });
 

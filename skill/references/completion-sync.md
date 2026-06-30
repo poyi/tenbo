@@ -15,6 +15,11 @@ item's `done_when` criteria are satisfied.*
 2. `git diff --name-only`: if no changed paths intersect any layer's `files` globs → exit silently.
 3. Proceed only when at least one path matches.
 
+**Impact context — run before doc/status decisions:** after agent-authored code changes,
+run `npx tenbo-dashboard impact --json`. Use `affected_layers` and `stale_docs` as the
+checklist for narrative/code-map freshness and `related_items` as leads for the roadmap
+item match. This output is advisory; never auto-flip roadmap status from impact alone.
+
 ## No roadmap item
 
 Run `references/reconciliation.md`. Mechanical updates apply silently with a one-line
@@ -75,9 +80,10 @@ summary. Judgment calls use the universal prompting rule.
     `.tenbo/agent-context.md` from the template. Hash-compare new content vs existing —
     if identical, skip the write. Idempotent.
 12. **Refresh tenbo state.** Run `npx tenbo-dashboard sync --scope <scope-id>` (or
-    plain `sync` if changes spanned multiple scopes). This recomputes metrics,
-    re-runs init-check, re-validates, AND surfaces any NEW critical/warning findings
-    inline — in one command. Without this, the dashboard's Health page (and the
+    plain `sync` if changes spanned multiple scopes). This refreshes the derived
+    source index, recomputes metrics, re-runs init-check, re-validates, AND
+    surfaces any NEW critical/warning findings inline — in one command. Without
+    this, the dashboard's Health page, source-evidence routing, impact output (and the
     next session's briefing) will show stale data. Cheap — do not skip.
 13. **Health note.** If `sync` reported new findings: pass the most severe 1–2 lines
     through verbatim as a one-liner to the user. At most once per session.

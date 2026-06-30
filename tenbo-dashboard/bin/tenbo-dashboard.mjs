@@ -49,6 +49,9 @@ const commands = {
   next: 'scripts/next.ts',
   'work-queue': 'scripts/work-queue.ts',
   context: 'scripts/context.ts',
+  impact: 'scripts/impact.ts',
+  index: 'scripts/index.ts',
+  reminder: 'scripts/reminder.ts',
   hook: 'scripts/hook.ts',
 };
 
@@ -97,6 +100,10 @@ ${topLevelItemHelpLines().join('\n')}
                                    [--type <type>] [--json]
   tenbo-dashboard context feature  Fetch agent planning context for a natural-language request
                                    --query "<request>" [--json]
+  tenbo-dashboard impact           Map git changes to affected layers, docs, items,
+                                   and verification checks [--since <ref>] [--json]
+  tenbo-dashboard index            Build or refresh the derived source index [--if-stale] [--json]
+  tenbo-dashboard reminder print   Print advisory session reminder text [--json]
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
   tenbo-dashboard next-id <prefix> Allocate next roadmap item ID

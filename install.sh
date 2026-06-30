@@ -67,6 +67,8 @@ FLAGS
   --with-dashboard      Also install the tenbo-dashboard npm package globally.
                         On by default — pass --minimal to skip.
   --minimal             Just the editor packages. Skips dashboard install.
+  Context reminders are not auto-installed; run
+                        tenbo-dashboard reminder print for manual hook text.
   --list                Print the editor matrix and exit.
   --no-color            Disable ANSI color codes (auto-disabled on non-TTY).
   -h, --help            Show this help and exit.

@@ -32,5 +32,4 @@ export default defineConfig({
       'lucide-react',
     ],
   },
-  test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },
 });

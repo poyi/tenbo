@@ -35,6 +35,11 @@ the init path choice (intent-first vs source-scan), and ceremony reduction.
 When a domain step says "load layer constraints", it specifies a **tier** that
 determines how much context to load. Default to the lowest sufficient tier.
 
+Optional context reminders are advisory only. They may point agents at
+`npx tenbo-dashboard context feature --query "<user request>" --json`, but must never
+block reads, edits, searches, or command execution. Executable reminders must fail
+open, keep a strict timeout, and avoid mutating project files.
+
 ### Tier 0 — Briefing only (~500 tokens)
 
 Read `.tenbo/agent-context.md` only. Sufficient for: session briefing, routing

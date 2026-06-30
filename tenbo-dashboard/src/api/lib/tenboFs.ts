@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync, renameSync, statSync, type Stats } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, renameSync, statSync, mkdirSync, type Stats } from 'node:fs';
 import path from 'node:path';
 import { parse as parseSimple, stringify as yamlStringify } from 'yaml';
 import { parseYaml, stringifyYaml, patchSeqItem, reorderSeqItems } from './yamlOrdered';
@@ -272,6 +272,25 @@ function atomicWrite(filePath: string, content: string): void {
   // disk; the file watcher's invalidate will cover external edits, this
   // covers our own writes (no race with the SSE event arriving "later").
   invalidateCache(filePath);
+}
+
+export function generatedCachePath(repoRoot: string, ...parts: string[]): string {
+  return path.join(tenboDir(repoRoot), 'cache', ...parts);
+}
+
+export function writeGeneratedCacheFile(repoRoot: string, parts: string[], content: string): void {
+  const file = generatedCachePath(repoRoot, ...parts);
+  const dir = path.dirname(file);
+  mkdirSync(dir, { recursive: true });
+  const ignorePath = path.join(generatedCachePath(repoRoot), '.gitignore');
+  if (!existsSync(ignorePath)) writeFileSync(ignorePath, '*\n!.gitignore\n', 'utf8');
+  atomicWrite(file, content);
+}
+
+export function readGeneratedCacheFile(repoRoot: string, parts: string[]): string | null {
+  const file = generatedCachePath(repoRoot, ...parts);
+  if (!existsSync(file)) return null;
+  return readFileSync(file, 'utf8');
 }
 
 export function patchItem(repoRoot: string, scopeId: string, itemId: string, patch: Partial<Item>): void {

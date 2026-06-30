@@ -33,6 +33,10 @@ Project overview, principles, and glossary alongside per-layer narratives, inten
 
 Surfaces the things that would otherwise become tech debt nobody mentions: oversized layers (hotspots), code-map references that no longer match real files (doc drift), unreferenced files, coupling violations, dead code. Each finding carries a severity, the file it points at, and a suggested fix.
 
+Some health findings include generated graph evidence such as importers, exports,
+and layer ownership. This evidence is rebuilt from source and `.tenbo/` metadata;
+it is not separate project memory.
+
 ## CLI tools
 
 The same package ships commands the skill uses behind the scenes — also runnable directly:
@@ -46,6 +50,8 @@ npx tenbo-dashboard item link-commit sk-030 7fc09a5
 npx tenbo-dashboard items --status done --verification pending_live --json
 npx tenbo-dashboard next --json
 npx tenbo-dashboard context feature --query "help me build X" --json
+npx tenbo-dashboard impact --json     # Map git changes to affected layers/docs/items
+npx tenbo-dashboard index --json      # Rebuild the derived source index
 npx tenbo-dashboard validate          # Schema + consistency checks
 npx tenbo-dashboard init-check        # Strict completeness check after fresh init
 npx tenbo-dashboard metrics --all     # Recompute scope metrics + health findings

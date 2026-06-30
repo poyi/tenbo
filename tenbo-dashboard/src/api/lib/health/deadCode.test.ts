@@ -21,6 +21,7 @@ describe('analyzeDeadCode', () => {
     expect(unusedFinding?.suggestion.summary).toBe('Review unused.ts');
     expect(unusedFinding?.suggestion.action_kind).toBe('review-file');
     expect(unusedFinding?.details.kind === 'dead-code' ? unusedFinding.details.static_import_evidence : '').toContain('No repo-wide static import');
+    expect(unusedFinding?.details.kind === 'dead-code' ? unusedFinding.details.exported_symbols : []).toEqual(['y']);
     expect(findings.find(f => f.target === 'src/used.ts')).toBeUndefined();
     rmSync(root, { recursive: true, force: true });
   });

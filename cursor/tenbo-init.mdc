@@ -66,10 +66,12 @@ already run by the session gate). Use repo size to choose the init path.
    - AI context files (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`) for project understanding.
    Classify per `tenbo-classification-heuristics.mdc` in batches of 5.
 10. **Compute health + run init-check + validate (one command).**
-    `npx tenbo-dashboard sync` — runs metrics for every scope, then init-check,
-    then validate, in that order. Exits non-zero if any step fails. Surfaces
-    new critical/warning findings inline so init can't silently produce a
-    half-set-up project. If this exits non-zero, fix and re-run; do NOT
+    `npx tenbo-dashboard sync` — refreshes the derived source index, runs metrics
+    for every scope, then init-check, then validate, in that order. Exits non-zero
+    if any step fails. Surfaces new critical/warning findings inline so init can't
+    silently produce a half-set-up project. The source index is written under
+    `.tenbo/cache/` with a cache-local `.gitignore`, so generated source evidence
+    stays out of normal project commits. If this exits non-zero, fix and re-run; do NOT
     proceed past this step.
 11. **Bridge with inline health summary + suggested items.** Read every scope's
     `.tenbo/scopes/<scope>/metrics.json`. Each entry in `findings:` carries `severity`

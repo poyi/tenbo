@@ -2,13 +2,21 @@ import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { readLayerContent, readState } from './tenboFs';
 import { comparePriority } from './priority';
+import { checkSourceIndexFreshness, readSourceIndex } from './sourceIndex/store';
+import { querySourceIndex, type SourceEvidenceFile } from './sourceIndex/query';
 import type { Item, Layer, Scope, Status } from '../../types';
 
 export type ContextIntent = 'session' | 'feature' | 'item';
 export type ContextConfidence = 'high' | 'medium' | 'low';
 
 export interface ContextWarning {
-  kind: 'missing_agent_context' | 'stale_agent_context';
+  kind:
+    | 'missing_agent_context'
+    | 'stale_agent_context'
+    | 'missing_source_index'
+    | 'stale_source_index'
+    | 'corrupt_source_index'
+    | 'incompatible_source_index';
   message: string;
   path: string;
   age_days?: number;
@@ -34,6 +42,27 @@ export interface ContextItemEntry {
   scope: string;
   item: ContextItemSummary;
   score: number;
+}
+
+export type ContextReadPlanKind =
+  | 'product'
+  | 'layer-intent'
+  | 'layer-code-map'
+  | 'roadmap-item'
+  | 'source-file'
+  | 'spec';
+
+export interface ContextReadPlanEntry {
+  path: string;
+  kind: ContextReadPlanKind;
+  reason: string;
+  priority: number;
+}
+
+export interface ContextVerificationEntry {
+  command: string;
+  purpose: string;
+  when: string;
 }
 
 export interface ContextLayerEntry {
@@ -76,6 +105,8 @@ export interface FeatureContextBundle {
   context: {
     layer_docs: string[];
     files_to_read: string[];
+    read_plan: ContextReadPlanEntry[];
+    verification_plan: ContextVerificationEntry[];
   };
   warnings: ContextWarning[];
 }
@@ -285,6 +316,83 @@ function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
 
+function pushReadPlan(
+  entries: ContextReadPlanEntry[],
+  seen: Set<string>,
+  entry: ContextReadPlanEntry,
+) {
+  if (seen.has(entry.path)) return;
+  seen.add(entry.path);
+  entries.push(entry);
+}
+
+function buildReadPlan(args: {
+  layerDocs: string[];
+  activeItems: ScoredItemEntry[];
+  matchingItems: ScoredItemEntry[];
+  sourceEvidence: SourceEvidenceFile[];
+  filesToRead: string[];
+}): ContextReadPlanEntry[] {
+  const entries: ContextReadPlanEntry[] = [];
+  const seen = new Set<string>();
+  pushReadPlan(entries, seen, {
+    path: '.tenbo/overview.md',
+    kind: 'product',
+    reason: 'Product goals and non-goals frame the request',
+    priority: 1,
+  });
+  for (const doc of args.layerDocs) {
+    pushReadPlan(entries, seen, {
+      path: doc,
+      kind: doc.endsWith('/intent.md') ? 'layer-intent' : 'layer-code-map',
+      reason: 'Selected layer context for the request',
+      priority: entries.length + 1,
+    });
+  }
+  for (const source of args.sourceEvidence) {
+    pushReadPlan(entries, seen, {
+      path: source.path,
+      kind: 'source-file',
+      reason: source.reason,
+      priority: entries.length + 1,
+    });
+  }
+  for (const entry of [...args.activeItems, ...args.matchingItems]) {
+    for (const link of entry.item.links ?? []) {
+      pushReadPlan(entries, seen, {
+        path: link,
+        kind: 'spec',
+        reason: `Linked plan/spec for ${entry.item.id}`,
+        priority: entries.length + 1,
+      });
+    }
+  }
+  for (const file of args.filesToRead) {
+    pushReadPlan(entries, seen, {
+      path: file,
+      kind: file.startsWith('.tenbo/') ? 'roadmap-item' : 'source-file',
+      reason: 'Referenced by active or matching roadmap context',
+      priority: entries.length + 1,
+    });
+  }
+  return entries.slice(0, 12).map((entry, index) => ({ ...entry, priority: index + 1 }));
+}
+
+function buildVerificationPlan(): ContextVerificationEntry[] {
+  return [
+    {
+      command: 'node tenbo-dashboard/bin/tenbo-dashboard.mjs validate --json',
+      purpose: 'Check Tenbo roadmap and documentation structure',
+      when: 'after changing .tenbo files',
+    },
+    {
+      command: 'cd tenbo-dashboard && npm test -- --run',
+      purpose: 'Run dashboard and CLI unit tests',
+      when: 'after changing dashboard code',
+    },
+  ];
+}
+
 function confidenceForScore(score: number): ContextConfidence {
   if (score >= 3) return 'high';
   if (score >= 2) return 'medium';
@@ -306,6 +414,24 @@ function scopeCandidates(scopes: Scope[], scoredLayers: ScoredLayer[], matchingI
       score: layerScore + itemScore,
     };
   }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+}
+
+function withSourceScopeScores(candidates: ContextScopeEntry[], sourceScores: Map<string, number>): ContextScopeEntry[] {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      score: candidate.score + (sourceScores.get(candidate.id) ?? 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+}
+
+function withSourceLayerScores(scoredLayers: ScoredLayer[], sourceScores: Map<string, number>): ScoredLayer[] {
+  return scoredLayers
+    .map((entry) => ({
+      ...entry,
+      score: entry.score + (sourceScores.get(`${entry.scope.id}:${entry.layer.id}`) ?? 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.scope.id.localeCompare(b.scope.id) || a.layer.id.localeCompare(b.layer.id));
 }
 
 function roadmapEntriesForScope(scope: Scope, statuses: readonly Status[]): ScoredItemEntry[] {
@@ -333,24 +459,55 @@ function agentContextWarnings(repoRoot: string, now: Date): ContextWarning[] {
   return [];
 }
 
+function sourceIndexWarning(freshness: ReturnType<typeof checkSourceIndexFreshness>): ContextWarning | null {
+  if (freshness.status === 'fresh') return null;
+  const kindByStatus: Record<string, ContextWarning['kind']> = {
+    missing: 'missing_source_index',
+    stale: 'stale_source_index',
+    corrupt: 'corrupt_source_index',
+    incompatible: 'incompatible_source_index',
+  };
+  const kind = kindByStatus[freshness.status];
+  if (!kind) return null;
+  return {
+    kind,
+    path: '.tenbo/cache/source-index.json',
+    message: freshness.message,
+  };
+}
+
 export function resolveFeatureContext(repoRoot: string, query: string, opts: ResolveOptions = {}): FeatureContextBundle {
   const now = opts.now ?? new Date();
   const state = readState(repoRoot);
   const queryTokens = tokenize(query);
   const goals = parseGoals(state.workspaceContent.overviewMd);
   const nonGoals = parseNonGoals(state.workspaceContent.overviewMd);
+  const sourceIndex = readSourceIndex(repoRoot);
+  const sourceFreshness = checkSourceIndexFreshness(repoRoot, sourceIndex);
+  const sourceQuery = sourceFreshness.status === 'fresh' && sourceIndex
+    ? querySourceIndex(sourceIndex, query)
+    : null;
   const matchingItems = scoreItems(queryTokens, state.scopes);
-  const scoredLayers = scoreLayers(repoRoot, queryTokens, state.scopes, matchingItems);
-  const candidates = scopeCandidates(state.scopes, scoredLayers, matchingItems);
-  const topLayer = scoredLayers[0];
-  const confidence = confidenceForScore(topLayer?.score ?? 0);
+  const scoredLayers = withSourceLayerScores(
+    scoreLayers(repoRoot, queryTokens, state.scopes, matchingItems),
+    sourceQuery?.layerScores ?? new Map(),
+  );
+  const candidates = withSourceScopeScores(
+    scopeCandidates(state.scopes, scoredLayers, matchingItems),
+    sourceQuery?.scopeScores ?? new Map(),
+  );
+  const topScope = candidates[0];
+  const confidence = confidenceForScore(topScope?.score ?? 0);
   const selectedScope = confidence === 'low'
     ? null
-    : state.scopes.find((scope) => scope.id === topLayer.scope.id) ?? null;
+    : state.scopes.find((scope) => scope.id === topScope.id) ?? null;
+  const scopedLayers = selectedScope
+    ? scoredLayers.filter((entry) => entry.scope.id === selectedScope.id && entry.score > 0)
+    : [];
+  const topLayer = scopedLayers[0];
   const selectedLayers = selectedScope
-    ? scoredLayers
-      .filter((entry) => entry.scope.id === selectedScope.id && entry.score > 0)
-      .filter((entry) => entry.score === topLayer.score)
+    ? scopedLayers
+      .filter((entry) => entry.score === topLayer?.score)
       .slice(0, 3)
       .map((entry) => entry.layer.id)
     : [];
@@ -380,6 +537,17 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
     ...activeItems.flatMap((entry) => entry.item.files_to_read ?? []),
     ...matchingItems.flatMap((entry) => entry.item.files_to_read ?? []),
   ]);
+  const sourceEvidence = (sourceQuery?.files ?? [])
+    .filter((entry) => !selectedScope || entry.scope === selectedScope.id)
+    .filter((entry) => selectedLayers.length === 0 || entry.layers.some((layer) => selectedLayers.includes(layer)));
+  const readPlan = buildReadPlan({
+    layerDocs,
+    activeItems,
+    matchingItems,
+    sourceEvidence,
+    filesToRead,
+  });
+  const sourceWarning = sourceIndexWarning(sourceFreshness);
 
   return {
     ok: true,
@@ -409,7 +577,12 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
     context: {
       layer_docs: layerDocs,
       files_to_read: filesToRead,
+      read_plan: readPlan,
+      verification_plan: buildVerificationPlan(),
     },
-    warnings: agentContextWarnings(repoRoot, now),
+    warnings: [
+      ...agentContextWarnings(repoRoot, now),
+      ...(sourceWarning ? [sourceWarning] : []),
+    ],
   };
 }

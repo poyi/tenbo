@@ -198,14 +198,26 @@ single source of truth for setup behavior — when in doubt, read it before acti
 
 #### Automatic context fetch
 
-Before planning or implementing a normal feature/build request, silently try:
+Before planning or implementing a normal feature/build request, silently refresh
+the derived source index, then fetch context:
 
 ```bash
+npx tenbo-dashboard index --if-stale --json
 npx tenbo-dashboard context feature --query "<user request>" --json
 ```
 
+The index step writes only rebuildable `.tenbo/cache/` data. It is not project memory.
+If index refresh is unavailable, slow, or fails, continue to `context feature`; the
+context command will fail open with freshness warnings and fallback routing.
 Use the returned bundle as the first context source: product goals, likely scope/layers,
 matching roadmap items, active/next work, recommended files, and freshness warnings.
+Use `context.read_plan` as the ordered first-read list before broad source search
+unless the request names a specific file. Use `context.verification_plan` to choose
+the smallest relevant post-change checks.
+Optional context reminders are advisory. They may point agents at
+`npx tenbo-dashboard context feature --query "<user request>" --json`, but they must never
+block reads, edits, searches, or command execution. Every executable reminder must fail
+open, keep a strict timeout, and avoid mutating project files.
 High confidence → proceed with the recommended scope/layers. Medium confidence → proceed
 with the best match and ask one compact confirmation at the end. Low confidence → ask one
 clarifying question before planning. If the command is unavailable or fails because the
@@ -578,6 +590,7 @@ npx tenbo-dashboard items --type refactor --status next,later --fields id,title,
 npx tenbo-dashboard list --status later --json
 npx tenbo-dashboard next --agent-summary --json
 npx tenbo-dashboard work-queue --type refactor --status now,next,later --json
+npx tenbo-dashboard index --if-stale --json
 npx tenbo-dashboard context feature --query "<user request>" --json
 npx tenbo-dashboard commit-ready --json
 ```

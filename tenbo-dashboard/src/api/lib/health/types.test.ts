@@ -29,6 +29,7 @@ describe('health types', () => {
         git_age_days: 0,
         repo_static_importers: [],
         static_import_evidence: 'No repo-wide static import found.',
+        exported_symbols: [],
       },
     };
     expect(f.signal).toBe('dead-code');

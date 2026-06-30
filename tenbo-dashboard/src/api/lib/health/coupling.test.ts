@@ -6,6 +6,8 @@ const stubGraph = (edges: Record<string, string[]>): ImportGraph => ({
   importsFrom: (f) => edges[f] ?? [],
   importedBy: () => [],
   allFiles: () => Object.keys(edges),
+  layerFor: () => undefined,
+  exportsFrom: () => [],
 });
 
 describe('analyzeCoupling', () => {
@@ -23,6 +25,9 @@ describe('analyzeCoupling', () => {
     expect(findings[0].details.kind).toBe('coupling');
     if (findings[0].details.kind === 'coupling') {
       expect(findings[0].details.crosses_public_api).toBe(false);
+      expect(findings[0].details.source_layer).toBe('A');
+      expect(findings[0].details.target_layer).toBe('B');
+      expect(findings[0].details.importer_count).toBe(1);
     }
   });
 

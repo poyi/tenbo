@@ -1,6 +1,6 @@
 {
   "name": "tenbo-dashboard",
-  "version": "0.10.3",
+  "version": "0.11.0",
   "description": "Local-first architecture dashboard and CLI tools for .tenbo/ repos",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,9 @@
     "bin/",
     "src/",
     "scripts/",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!src/test-setup.ts",
     "index.html",
     "vite.config.ts",
     "tsconfig.json"
@@ -47,7 +50,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@parcel/watcher": "^2.5.6",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "@xyflow/react": "^12.10.2",
     "chokidar": "^3.6.0",
     "dagre": "^0.8.5",
@@ -59,9 +62,9 @@
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
     "ts-morph": "^25",
-    "tsx": "^4.19.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.4",
-    "vite": "^5.4.3",
+    "vite": "^6.4.3",
     "yaml": "^2.5.1"
   },
   "devDependencies": {
