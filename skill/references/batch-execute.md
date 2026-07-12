@@ -98,6 +98,18 @@ the design discussion.
 4. Present the batch: "Ready to execute N items: [list with titles]. Go?"
    User can reorder, drop items, or confirm.
 
+## Coordinate writes — ensure a hub (x-006)
+
+Before dispatching any workers, run `npx tenbo-dashboard hub ensure` once. This brings up
+the single-writer hub (or no-ops if one is already running) so every worker's roadmap
+mutations route through one serialized writer instead of racing on direct writes — matters
+most for parallel dispatch, where workers would otherwise cold-start-race. It is idempotent
+and **fail-open**: if `ensure` fails or times out, proceed with dispatch anyway (workers
+fall back to direct writes exactly as today). Teardown is automatic — the hub idle-shuts-down
+after the batch, so no explicit stop is needed (`npx tenbo-dashboard hub stop` exists for
+manual use). Pass each worker an agent identity (`TENBO_AGENT`) as already described below so
+the hub's journal attributes their writes.
+
 ## Execution loop
 
 Process items sequentially by default (parallel only when user explicitly
