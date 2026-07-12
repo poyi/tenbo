@@ -56,6 +56,7 @@ const commands = {
   reminder: 'scripts/reminder.ts',
   hook: 'scripts/hook.ts',
   reconcile: 'scripts/reconcile.ts',
+  hub: 'scripts/hub.ts',
 };
 
 // Documented aliases for the bare-launch behavior. Users (and agents) reading
@@ -133,6 +134,14 @@ ${topLevelItemHelpLines().join('\n')}
                                    [--since <ref>] [--dry-run] [--json]
   tenbo-dashboard reconcile clear  Remove pending-reconciliation entries once a doc
                                    update lands [--layer <scope:layer>] [--commit <sha>]
+  tenbo-dashboard hub start        Run a headless, API-only hub server in the
+                                   foreground (health+mutate only, no browser UI)
+                                   [--port <n>]
+  tenbo-dashboard hub ensure       Idempotent: start a hub for this repo if none
+                                   is running yet, else no-op [--json]
+  tenbo-dashboard hub stop         Stop this repo's running hub, if any [--json]
+  tenbo-dashboard hub status       Report whether a hub is running
+                                   (pid/port/uptime) [--json]
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
 

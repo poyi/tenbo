@@ -9,6 +9,18 @@ import { hubHealthRoute } from '../src/api/routes/hubHealth';
 import { hubMutateRoute } from '../src/api/routes/hubMutate';
 import { writeHubLockfile } from '../src/api/lib/hub/lockfile';
 import { readJournal } from '../src/api/lib/hub/journal';
+import { maybeAutostartHub } from '../src/api/lib/hub/autostart';
+
+// td-038 regression guard: replace maybeAutostartHub with a spy so the tests
+// below can assert exactly WHERE performMutation (scripts/item.ts) calls it —
+// only on the true no-hub path, never when a hub was discovered — regardless
+// of vitest.config.ts's process-wide `TENBO_NO_AUTOSTART=1` (which would
+// otherwise make the real function a silent no-op and hide a mis-wire where
+// the call moved into the `if (hub)` branch or became unconditional).
+vi.mock('../src/api/lib/hub/autostart', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/api/lib/hub/autostart')>();
+  return { ...actual, maybeAutostartHub: vi.fn() };
+});
 
 /**
  * Live, end-to-end demonstration of td-029's CLI routing decision:
@@ -247,6 +259,58 @@ describe('item CLI hub routing (live, td-029)', () => {
       expect(stderrSpy).toHaveBeenCalledWith('note: no tenbo hub running, writing files directly\n');
     } finally {
       stderrSpy.mockRestore();
+    }
+  });
+});
+
+describe('item CLI hub-autostart call-site wiring (td-038 regression)', () => {
+  // Scoped env override: vitest.config.ts sets TENBO_NO_AUTOSTART=1 for the
+  // whole suite (see comment there). We stub it empty here so that, even
+  // though maybeAutostartHub itself is mocked (bypassing its internal gate
+  // entirely), the test also holds if a future refactor turns the mock into
+  // a partial spy over the real implementation. Restored in afterEach so no
+  // other test in the suite is affected.
+  beforeEach(() => {
+    vi.stubEnv('TENBO_NO_AUTOSTART', '');
+    vi.mocked(maybeAutostartHub).mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('calls maybeAutostartHub exactly once on the no-hub fallback path, and the write still completes', async () => {
+    // No lockfile written for `dir` — discoverHub finds nothing.
+    const result = await runItemCli(dir, ['set-status', 'ed-001', 'done']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('ed-001 status: done\n');
+    expect(maybeAutostartHub).toHaveBeenCalledTimes(1);
+    expect(maybeAutostartHub).toHaveBeenCalledWith(dir);
+
+    const roadmap = readFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), 'utf8');
+    expect(roadmap).toContain('status: done');
+  });
+
+  it('does NOT call maybeAutostartHub when a live hub is discovered', async () => {
+    const health = hubHealthRoute(dir);
+    const mutate = hubMutateRoute(dir);
+    const server: Server = createServer((req, res) => {
+      health(req, res, () => {
+        mutate(req, res, () => { res.statusCode = 404; res.end(); });
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as AddressInfo).port;
+    writeHubLockfile(dir, port);
+
+    try {
+      const result = await runItemCli(dir, ['set-status', 'ed-001', 'done']);
+
+      expect(result.exitCode).toBe(0);
+      expect(maybeAutostartHub).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });

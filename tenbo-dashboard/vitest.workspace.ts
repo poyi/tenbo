@@ -38,6 +38,12 @@ const HUB_LIVE_SERVER_FILES = [
   // route and the hub mutation queue over a real http server — same flake
   // risk as the two files above under parallel scheduling, same fix.
   'src/api/routes/items.test.ts',
+  // td-037: the headless hub server and its CLI both bind real node:http
+  // servers on ephemeral ports (including EADDRINUSE-collision tests that
+  // deliberately race two binds) — same timing-sensitivity as the files
+  // above under parallel scheduling, same fix.
+  'src/api/lib/hub/hubServer.test.ts',
+  'scripts/hub.test.ts',
 ];
 
 export default defineWorkspace([

@@ -10,6 +10,7 @@ import {
   summarizeDoneWhenResults,
 } from '../src/api/lib/doneWhenChecks';
 import { discoverHub } from '../src/api/lib/hub/discover';
+import { maybeAutostartHub } from '../src/api/lib/hub/autostart';
 import { sendHubMutation } from '../src/api/lib/hub/client';
 import { applyMutation, type MutationOp, type MutationRequest } from '../src/api/lib/hub/mutations';
 import { resolveAgentIdentity } from '../src/api/lib/hub/identity';
@@ -48,6 +49,13 @@ const VALUE_FLAGS = [
  * the mutation but its HTTP response was lost, the fallback's `applyMutation`
  * call carries the SAME mutation id, sees it already journaled, and returns
  * the current state instead of double-applying.
+ *
+ * td-038: when discovery finds NO hub at all, this also fires
+ * `maybeAutostartHub` (src/api/lib/hub/autostart.ts) as a fire-and-forget
+ * side effect — it spawns a detached `hub ensure` for subsequent writes and
+ * other agents, without adding any latency to THIS write. Set
+ * `TENBO_NO_AUTOSTART` (any non-empty value) to disable it and keep today's
+ * always-direct-write behavior.
  */
 async function performMutation(repoRoot: string, op: MutationOp, agent: string): Promise<WriteResult> {
   const req: MutationRequest = { ...op, mutationId: randomUUID(), agent };
@@ -62,6 +70,17 @@ async function performMutation(repoRoot: string, op: MutationOp, agent: string):
       return await sendHubMutation(hub, req);
     } catch {
       // Fall through to the direct-write fallback below.
+    }
+  } else {
+    // td-038: no hub was discovered at all (as opposed to a hub existing but
+    // this mutation attempt failing above) — lazily kick one off for
+    // subsequent writes. Fire-and-forget: never awaited, never allowed to
+    // throw out of this call (see autostart.ts's own fail-open guarantee).
+    try {
+      maybeAutostartHub(repoRoot);
+    } catch {
+      // Belt-and-suspenders — maybeAutostartHub already swallows its own
+      // errors, but this call must never be the thing that breaks a write.
     }
   }
   process.stderr.write(HUB_FALLBACK_NOTICE);
