@@ -48,10 +48,38 @@ function pushAll(target: Set<string>, values: string[]) {
   for (const value of values) target.add(value);
 }
 
-export function collectChangedFiles(repoRoot: string, options: { since?: string } = {}): ImpactGitSummary {
+export function collectChangedFiles(
+  repoRoot: string,
+  options: { since?: string; commitOnly?: boolean } = {},
+): ImpactGitSummary {
   const changed = new Set<string>();
   const sources = new Set<string>();
   const warnings: string[] = [];
+
+  if (options.commitOnly) {
+    // Post-commit flag path: map ONLY the committed range `since..HEAD`
+    // (default `HEAD~1..HEAD`, i.e. the diff of the commit just made).
+    // Deliberately skips the unstaged/staged/untracked sources below —
+    // those reflect working-tree state that has nothing to do with the
+    // commit being flagged, and routinely stays dirty right after a
+    // commit (partial `git add -p`, untracked scratch/build files).
+    // Fails open on the root-commit case (no `HEAD~1`): empty set +
+    // warning, no throw — same contract as the default path below.
+    const since = options.since ?? 'HEAD~1';
+    try {
+      pushAll(changed, gitLines(repoRoot, ['diff', '--name-only', `${since}..HEAD`]));
+      sources.add('since');
+    } catch (err) {
+      warnings.push(`could not compare against ${since}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return {
+      compared_ref: since,
+      changed_files: Array.from(changed).sort(),
+      sources: Array.from(sources).sort(),
+      warnings,
+    };
+  }
+
   if (options.since) {
     try {
       pushAll(changed, gitLines(repoRoot, ['diff', '--name-only', `${options.since}...HEAD`]));
@@ -111,7 +139,10 @@ function sourceIndexWarning(status: string): string | null {
   return `source index is ${status}; impact used fallback ownership where needed`;
 }
 
-export function resolveImpact(repoRoot: string, options: { since?: string } = {}): ImpactSummary {
+export function resolveImpact(
+  repoRoot: string,
+  options: { since?: string; commitOnly?: boolean } = {},
+): ImpactSummary {
   const git = collectChangedFiles(repoRoot, options);
   const state = readState(repoRoot);
   const sourceIndex = readSourceIndex(repoRoot);

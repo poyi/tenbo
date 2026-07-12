@@ -1,8 +1,10 @@
 import type { Connect } from 'vite';
 import path from 'node:path';
-import { patchItem, readState } from '../lib/tenboFs';
+import { patchItem, readState, PatchConflictError } from '../lib/tenboFs';
 import { recordRecentWrite } from '../lib/recentWrites';
 import { readBody, json, error, withErrorHandling } from '../lib/http';
+import { enqueueMutation } from '../lib/hub/mutationQueue';
+import type { Item } from '../../types';
 
 const ALLOWED = new Set(['title', 'description', 'status', 'layer', 'notes', 'links', 'verification', 'priority', 'done_when', 'files_to_read', 'risks', 'phases']);
 
@@ -29,15 +31,31 @@ export function itemsRoute(repoRoot: string): Connect.NextHandleFunction {
     const filePath = path.join(repoRoot, '.tenbo', 'scopes', scopeId, 'roadmap.yaml');
     recordRecentWrite(filePath, origin);
 
-    patchItem(repoRoot, scopeId, itemId, filtered);
+    // td-033: run the read-modify-write (and the post-write read-back below)
+    // through the SAME process-wide queue the hub/CLI mutation path uses
+    // (see hub/mutationQueue.ts, hub/hubMutate.ts). This makes the dashboard
+    // server a genuine single serialized writer — a UI PATCH and a
+    // concurrent hub mutation can no longer interleave their read/modify/write.
+    // The post-write item lookup is done INSIDE the queued turn too, so the
+    // response always reflects this write's own result, not a later queued
+    // mutation's.
+    let item: Item | undefined;
+    try {
+      item = await enqueueMutation(() => {
+        patchItem(repoRoot, scopeId, itemId, filtered);
+        const state = readState(repoRoot);
+        const scope = state.scopes.find((s) => s.id === scopeId);
+        return scope?.items.find((i) => i.id === itemId);
+      });
+    } catch (err) {
+      if (err instanceof PatchConflictError) {
+        return error(res, 409, err.message);
+      }
+      throw err;
+    }
 
-    // Re-read state and return the canonical post-write item so the client
-    // can merge into its local state immediately (td-005 step 1+2 —
-    // optimistic UI without waiting for SSE). Falls through to a 404 if
-    // the item somehow disappeared during the write (concurrent delete).
-    const state = readState(repoRoot);
-    const scope = state.scopes.find((s) => s.id === scopeId);
-    const item = scope?.items.find((i) => i.id === itemId);
+    // Falls through to a 404 if the item somehow disappeared during the
+    // write (concurrent delete).
     if (!item) {
       return error(res, 404, `item ${itemId} not found in scope ${scopeId} after patch`);
     }

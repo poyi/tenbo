@@ -43,6 +43,7 @@ const commands = {
   sync: 'scripts/sync.ts',
   archive: 'scripts/archive.ts',
   'commit-ready': 'scripts/commit-ready.ts',
+  'commit-context': 'scripts/commit-context.ts',
   item: 'scripts/item.ts',
   items: 'scripts/items.ts',
   list: 'scripts/items.ts',
@@ -51,8 +52,10 @@ const commands = {
   context: 'scripts/context.ts',
   impact: 'scripts/impact.ts',
   index: 'scripts/index.ts',
+  'code-map': 'scripts/code-map.ts',
   reminder: 'scripts/reminder.ts',
   hook: 'scripts/hook.ts',
+  reconcile: 'scripts/reconcile.ts',
 };
 
 // Documented aliases for the bare-launch behavior. Users (and agents) reading
@@ -100,9 +103,14 @@ ${topLevelItemHelpLines().join('\n')}
                                    [--type <type>] [--json]
   tenbo-dashboard context feature  Fetch agent planning context for a natural-language request
                                    --query "<request>" [--json]
+  tenbo-dashboard context session  Deterministic session-gate briefing bundle [--json]
+  tenbo-dashboard context item <id>  Deterministic per-item context bundle [--json]
   tenbo-dashboard impact           Map git changes to affected layers, docs, items,
                                    and verification checks [--since <ref>] [--json]
   tenbo-dashboard index            Build or refresh the derived source index [--if-stale] [--json]
+  tenbo-dashboard code-map generate  Regenerate the auto-generated structural region of a
+                                   layer's code-map.md from the source index
+                                   [--scope <id>] [--layer <id>] [--check] [--json]
   tenbo-dashboard reminder print   Print advisory session reminder text [--json]
   tenbo-dashboard validate         Run validation rules
   tenbo-dashboard init-check       Strict completeness check for fresh init (errors on missing skeletons, file_count:0, etc)
@@ -111,10 +119,20 @@ ${topLevelItemHelpLines().join('\n')}
   tenbo-dashboard archive          Move old done/dropped items to roadmap-archive.yaml
                                    [--scope <id>] [--days 30] [--max 20]
   tenbo-dashboard hook install     Install opt-in pre-commit validation hook
-                                   [--dry-run] [--force]
-  tenbo-dashboard hook uninstall   Remove the tenbo pre-commit hook (idempotent)
+                                   (or 'prepare-commit-msg' for commit-context
+                                   suggestions, or 'post-commit' for doc-flag
+                                   detection) [--dry-run] [--force]
+  tenbo-dashboard hook uninstall   Remove a tenbo hook (idempotent)
+                                   [pre-commit|prepare-commit-msg|post-commit]
   tenbo-dashboard commit-ready     Report branch, diff, validation, and staging gates
                                    without committing [--json]
+  tenbo-dashboard commit-context   Propose roadmap item refs + a draft commit message
+                                   from the pending diff [--since <ref>] [--json] [--hook-format]
+  tenbo-dashboard reconcile flag   Map a commit's diff to affected layers and append
+                                   pending-reconciliation doc-flag entries
+                                   [--since <ref>] [--dry-run] [--json]
+  tenbo-dashboard reconcile clear  Remove pending-reconciliation entries once a doc
+                                   update lands [--layer <scope:layer>] [--commit <sha>]
   tenbo-dashboard --version        Print package version
   tenbo-dashboard help             Show this help
 

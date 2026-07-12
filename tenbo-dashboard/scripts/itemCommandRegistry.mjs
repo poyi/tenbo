@@ -29,6 +29,10 @@ export const ITEM_COMMANDS = [
     usage: 'tenbo-dashboard item verify <id> --check [--json]',
     summary: 'Check whether recorded evidence matches completion state.',
     details: [
+      'When done_when has structured `check:` entries, --check EXECUTES each',
+      '(strict timeout, TERM then KILL) and records pass/fail evidence on the',
+      "item's verification. Entries without a check are reported \"manual\"",
+      '(not auto-passed). Execution only ever happens on this explicit call.',
       'tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed>',
       '                                  [--evidence "<text>"] [--note "<text>"] [--json]',
     ],
@@ -50,6 +54,11 @@ export const ITEM_COMMANDS = [
     name: 'link-commit',
     usage: 'tenbo-dashboard item link-commit <id> <sha> [--json]',
     summary: 'Attach a commit link to an item.',
+  },
+  {
+    name: 'history',
+    usage: 'tenbo-dashboard item history <id> [--json]',
+    summary: 'Show who changed this item and when, from the mutation journal.',
   },
 ];
 

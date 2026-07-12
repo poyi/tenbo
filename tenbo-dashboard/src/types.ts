@@ -16,6 +16,8 @@ export interface ItemVerification {
   updated_at?: string;
   evidence?: string[];
   note?: string;
+  /** Resolved agent identity that recorded this verification (td-030). */
+  actor?: string;
 }
 
 /**
@@ -25,6 +27,39 @@ export interface ItemVerification {
  * Optional: most items leave it unset.
  */
 export type Priority = 'p0' | 'p1' | 'p2' | 'p3';
+
+/**
+ * Machine-checkable companion to a `done_when` bullet (x-003). `run` is a
+ * shell command (executed via `/bin/sh -c`, cwd = repo root) whose exit code
+ * is compared to `expect_exit`. Execution ONLY happens on an explicit
+ * `item verify --check` CLI invocation — see `doneWhenChecks.ts` for the
+ * strict-timeout execution mechanism and the full trust-model writeup.
+ */
+export interface DoneWhenCheck {
+  /** Shell command, run with the repo root as cwd. Never invoked automatically. */
+  run: string;
+  /** Expected exit code. Defaults to 0. */
+  expect_exit?: number;
+  /** Hard timeout in milliseconds before the process is killed (TERM then KILL). Defaults to 60000; hard-capped at 300000. */
+  timeout_ms?: number;
+}
+
+/**
+ * Structured `done_when` entry: a human-readable criterion paired with an
+ * executable check. See `DoneWhenCheck` for the command contract.
+ */
+export interface StructuredDoneWhen {
+  /** Human-readable acceptance criterion (same role as a plain-string entry). */
+  text: string;
+  check: DoneWhenCheck;
+}
+
+/**
+ * One `done_when` bullet: either a plain prose acceptance criterion (existing
+ * behavior, unchanged) or a `StructuredDoneWhen` object carrying a
+ * machine-checkable command (x-003).
+ */
+export type DoneWhenEntry = string | StructuredDoneWhen;
 
 /**
  * Optional per-phase progress entry for multi-phase roadmap items.
@@ -58,8 +93,8 @@ export interface Item {
   verification?: ItemVerification;
   /** layer ids touched by this item (bare ids for same-scope items, "<scope>:<layer>" for cross-scope items) */
   affects?: string[];
-  /** 1–3 plain-language bullets defining "done" */
-  done_when?: string[];
+  /** 1–3 plain-language bullets defining "done"; each may optionally carry a machine-checkable `check` (x-003). */
+  done_when?: DoneWhenEntry[];
   /** repo-relative file paths that future implementers should read first */
   files_to_read?: string[];
   /** freeform bullets noting known unknowns or risks */
@@ -116,6 +151,13 @@ export interface Item {
     decision: 'accept-with-violation' | 'scope-adjusted' | 'deferred';
     rationale?: string;
   }>;
+  /**
+   * Repo-relative path to this item's workpad file (e.g. `.tenbo/workpads/td-024.md`),
+   * created for substantial in-flight work at plan-path triage. See
+   * `skill/references/workpad-protocol.md`. Absent for lightweight items that use
+   * `notes:` only.
+   */
+  workpad?: string;
 }
 
 export interface Layer {

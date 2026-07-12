@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Item } from '../../types';
 import type { Route } from '../../router/routes';
+import { doneWhenText, isStructuredDoneWhen } from '../../api/lib/doneWhenShape';
 
 export function EnrichmentSections({ item, scopeId, navigate }: { item: Item; scopeId: string; navigate: (r: Route) => void }) {
   const affects = item.affects ?? [];
@@ -23,7 +24,7 @@ export function EnrichmentSections({ item, scopeId, navigate }: { item: Item; sc
       </Section>
     );
   }
-  if (item.done_when?.length) sections.push(<Section key="done" title="What done looks like"><List items={item.done_when} /></Section>);
+  if (item.done_when?.length) sections.push(<Section key="done" title="What done looks like"><DoneWhenList items={item.done_when} /></Section>);
   if (item.risks?.length) sections.push(<Section key="risks" title="Risks / unknowns"><List items={item.risks} /></Section>);
   if (item.type) sections.push(<Section key="type" title="Type">{item.type}</Section>);
   if (item.files_to_read?.length) sections.push(<Section key="files" title="Files to read first" engineerOnly><List items={item.files_to_read} /></Section>);
@@ -46,4 +47,20 @@ function Section({ title, children, engineerOnly = false }: { title: string; chi
 
 function List({ items }: { items: string[] }) {
   return <ul>{items.map((x) => <li key={x}>{x}</li>)}</ul>;
+}
+
+/** Renders done_when entries, both plain-string and structured (x-003) forms. Structured entries with a `check` get a small hint that they're machine-checkable via `item verify --check`. */
+function DoneWhenList({ items }: { items: NonNullable<Item['done_when']> }) {
+  return (
+    <ul>
+      {items.map((entry, idx) => (
+        <li key={idx}>
+          {doneWhenText(entry)}
+          {isStructuredDoneWhen(entry) && (
+            <span style={{ fontSize: 11, color: 'var(--muted, #888)', marginLeft: 6 }}>· machine-checkable</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }

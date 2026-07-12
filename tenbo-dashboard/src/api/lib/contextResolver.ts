@@ -1,10 +1,18 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { parse as parseYamlText } from 'yaml';
 import { readLayerContent, readState } from './tenboFs';
 import { comparePriority } from './priority';
 import { checkSourceIndexFreshness, readSourceIndex } from './sourceIndex/store';
 import { querySourceIndex, type SourceEvidenceFile } from './sourceIndex/query';
-import type { Item, Layer, Scope, Status } from '../../types';
+import { normalizeNotes } from './notes';
+import { validate } from './validator';
+import { findItem } from './roadmapStore';
+import { doneWhenText } from './doneWhenChecks';
+import { isLayerCodeMapStale } from './codeMapGenerator';
+import { readPendingReconciliation } from './reconciliationFlag';
+import type { Item, Layer, Scope, Status, TenboState } from '../../types';
+import type { SourceIndex } from './sourceIndex/types';
 
 export type ContextIntent = 'session' | 'feature' | 'item';
 export type ContextConfidence = 'high' | 'medium' | 'low';
@@ -34,7 +42,7 @@ export interface ContextItemSummary {
   priority?: Item['priority'];
   goal_ref?: Item['goal_ref'];
   files_to_read?: string[];
-  done_when?: string[];
+  done_when?: Item['done_when'];
   risks?: string[];
 }
 
@@ -113,6 +121,153 @@ export interface FeatureContextBundle {
 
 interface ResolveOptions {
   now?: Date;
+}
+
+/** Bounded list caps. Documented here since several bundle sections share them. */
+const SESSION_LIST_CAP = 12;
+const OBSERVATIONS_CAP = 5;
+const LAYER_CONSTRAINTS_CAP = 5;
+
+export interface ContextSessionItemRef {
+  id: string;
+  scope: string;
+  title: string;
+  /**
+   * Days since the item's last recorded activity (workpad `last_updated`, else the
+   * most recent dated bullet in `notes:`). `null` when no dated evidence exists —
+   * such items are never flagged stale (indeterminate, not fresh).
+   */
+  days_active: number | null;
+}
+
+export interface ContextStaleItemRef extends ContextSessionItemRef {
+  days_active: number;
+  threshold_days: number;
+}
+
+export interface ContextValidationDelta {
+  /** `generated_at` of the previous `.tenbo/.validation-status.json` snapshot. */
+  generated_at: string;
+  previous_errors: number;
+  previous_warnings: number;
+  current_errors: number;
+  current_warnings: number;
+  /** Simple count deltas (current − previous, floored at 0) — not identity-diffed. */
+  new_errors: number;
+  new_warnings: number;
+}
+
+export interface ContextWorkpadResumeCandidate {
+  item_id: string;
+  scope: string;
+  title: string;
+  workpad: string;
+  unchecked_plan_items: number;
+}
+
+export interface ContextDocStaleLayerRef {
+  scope: string;
+  layer: string;
+  reason: string;
+}
+
+export interface ContextDocStaleness {
+  /** Bounded to DOC_STALENESS_CAP. Empty (not omitted) when the source index is missing/stale/corrupt/incompatible — see `warnings` for why. */
+  stale_layers: ContextDocStaleLayerRef[];
+  /** Total layers considered before capping — 0 when the index couldn't be used. */
+  checked_layers: number;
+}
+
+export interface ContextPendingReconciliationEntryRef {
+  layer: string;
+  kind: string;
+}
+
+export interface ContextPendingReconciliation {
+  /** Total entry count in the ledger (unbounded) — unchanged from the pre-td-036 shape. */
+  count: number;
+  path: string;
+  /**
+   * Bounded (PENDING_RECONCILIATION_CAP), deterministically-ordered per-entry
+   * `{ layer, kind }` breakdown (td-036) — lets the session briefing say "docs
+   * flagged for layers X, Y" without re-reading the YAML. Sorted by layer then
+   * kind then opened_at for stability; truncated (not sampled) beyond the cap.
+   */
+  entries: ContextPendingReconciliationEntryRef[];
+}
+
+export interface SessionContextBundle {
+  ok: true;
+  intent: 'session';
+  now: {
+    /** Total count of `now` items (unbounded); `items` below is capped. */
+    count: number;
+    items: ContextSessionItemRef[];
+  };
+  stale: {
+    now: ContextStaleItemRef[];
+    next: ContextStaleItemRef[];
+  };
+  /**
+   * `.tenbo/.pending-reconciliation.yaml` summary (td-036). Always present (like
+   * `doc_staleness`) — fail-open to `count: 0` + empty `entries` when the file is
+   * absent or malformed, rather than throwing or omitting the section.
+   */
+  pending_reconciliation: ContextPendingReconciliation;
+  /** Omitted when `.tenbo/.validation-status.json` is absent or unreadable. */
+  validation_delta?: ContextValidationDelta;
+  /** Omitted when no item has a workpad with unchecked plan items. */
+  workpad_resume?: ContextWorkpadResumeCandidate[];
+  /** Omitted when `.tenbo/observations.md` is absent. Bounded to the most recent entries. */
+  recent_observations?: string[];
+  /**
+   * Doc-staleness signal (td-027): layers whose generated `code-map.md`
+   * region is stale vs. the current source index. Always present (unlike the
+   * other optional sections above) — an empty `stale_layers` is itself
+   * meaningful ("checked, found nothing stale" vs. "section absent").
+   */
+  doc_staleness: ContextDocStaleness;
+  warnings: ContextWarning[];
+}
+
+export interface ContextLayerConstraints {
+  scope: string;
+  layer: string;
+  optimizing_for: string[];
+  anti_responsibilities: string[];
+  boundaries: string[];
+  invariants: string[];
+}
+
+export interface ContextWorkpadState {
+  path: string;
+  item: string | null;
+  opened: string | null;
+  last_updated: string | null;
+  env: string | null;
+  plan: { total: number; checked: number; unchecked_preview: string[] };
+  acceptance_criteria: { total: number; checked: number };
+  validation: { total: number; checked: number };
+}
+
+export type ContextWorkpadResult = ({ exists: true } & ContextWorkpadState) | { exists: false };
+
+export interface ItemContextBundle {
+  ok: true;
+  intent: 'item';
+  item_id: string;
+  scope: string;
+  item: ContextItemSummary;
+  /** Layer constraints for the item's primary layer(s), bounded to LAYER_CONSTRAINTS_CAP. */
+  layer_constraints: ContextLayerConstraints[];
+  context: {
+    layer_docs: string[];
+    files_to_read: string[];
+    read_plan: ContextReadPlanEntry[];
+    verification_plan: ContextVerificationEntry[];
+  };
+  workpad: ContextWorkpadResult;
+  warnings: ContextWarning[];
 }
 
 interface Goal {
@@ -218,7 +373,7 @@ function itemText(item: Item): string {
     item.layer,
     ...(item.layers ?? []),
     item.description,
-    ...(item.done_when ?? []),
+    ...(item.done_when ?? []).map(doneWhenText),
     ...(item.files_to_read ?? []),
     ...(item.risks ?? []),
   ].filter(Boolean).join(' ');
@@ -240,8 +395,14 @@ function layerText(repoRoot: string, scope: Scope, layer: Layer): string {
   ].join(' ');
 }
 
-function itemLayerIds(item: Item): string[] {
-  return [item.layer, ...(item.layers ?? []), ...(item.affects ?? [])].filter((value): value is string => Boolean(value));
+export function itemLayerIds(item: Item): string[] {
+  // `affects` conventionally repeats the item's primary `layer` (and
+  // sometimes overlaps `layers`) — dedup so an item boosts a given layer at
+  // most once instead of double-counting it in `itemBoostForLayer`.
+  const ids = [item.layer, ...(item.layers ?? []), ...(item.affects ?? [])].filter(
+    (value): value is string => Boolean(value),
+  );
+  return [...new Set(ids)];
 }
 
 function itemBoostForLayer(scope: Scope, layer: Layer, matchingItems: ScoredItemEntry[]): number {
@@ -580,6 +741,465 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
       read_plan: readPlan,
       verification_plan: buildVerificationPlan(),
     },
+    warnings: [
+      ...agentContextWarnings(repoRoot, now),
+      ...(sourceWarning ? [sourceWarning] : []),
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers for `session` and `item` intents.
+// ---------------------------------------------------------------------------
+
+const DATE_RE = /\d{4}-\d{2}-\d{2}/g;
+
+/** Latest `YYYY-MM-DD` date found anywhere in `text`, or null if none. */
+function mostRecentDateIn(text: string): Date | null {
+  const matches = text.match(DATE_RE);
+  if (!matches) return null;
+  let latest: Date | null = null;
+  for (const match of matches) {
+    const candidate = new Date(`${match}T00:00:00.000Z`);
+    if (Number.isNaN(candidate.getTime())) continue;
+    if (!latest || candidate.getTime() > latest.getTime()) latest = candidate;
+  }
+  return latest;
+}
+
+function daysSince(date: Date, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86_400_000));
+}
+
+/** Reads `stale_now_days` / `stale_next_days` from principles.md's fenced threshold block. Defaults fail open. */
+function readThresholds(principlesMd: string): { staleNowDays: number; staleNextDays: number } {
+  let staleNowDays = 7;
+  let staleNextDays = 30;
+  const block = principlesMd.match(/```yaml\s*([\s\S]*?)```/);
+  if (block) {
+    try {
+      const data = (parseYamlText(block[1]) as Record<string, unknown>) ?? {};
+      if (typeof data.stale_now_days === 'number') staleNowDays = data.stale_now_days;
+      if (typeof data.stale_next_days === 'number') staleNextDays = data.stale_next_days;
+    } catch {
+      // Malformed threshold block — fail open with defaults.
+    }
+  }
+  return { staleNowDays, staleNextDays };
+}
+
+interface WorkpadFrontmatter {
+  item: string | null;
+  opened: string | null;
+  last_updated: string | null;
+  env: string | null;
+}
+
+function parseWorkpadFrontmatter(text: string): WorkpadFrontmatter {
+  const fm: WorkpadFrontmatter = { item: null, opened: null, last_updated: null, env: null };
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return fm;
+  for (const line of match[1].split(/\r?\n/)) {
+    const kv = line.match(/^(\w+):\s*(.+)$/);
+    if (!kv) continue;
+    const [, key, value] = kv;
+    if (key === 'item' || key === 'opened' || key === 'last_updated' || key === 'env') {
+      fm[key] = value.trim();
+    }
+  }
+  return fm;
+}
+
+/** Body of a `## <header>` markdown section, up to the next `## ` heading or EOF. */
+function markdownSectionBody(md: string, header: string): string {
+  const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`##\\s+${escaped}\\s*\\r?\\n([\\s\\S]*?)(?:\\r?\\n##\\s|$)`, 'i');
+  return md.match(re)?.[1] ?? '';
+}
+
+function markdownBullets(body: string): string[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*-\s*/, '').trim())
+    .filter(Boolean);
+}
+
+function parseBulletSection(md: string, header: string): string[] {
+  return markdownBullets(markdownSectionBody(md, header));
+}
+
+/** Supports both the `## Optimizing for` bullet header and the older inline `Optimizing-for:` convention. */
+function parseOptimizingFor(md: string): string[] {
+  const bullets = parseBulletSection(md, 'Optimizing for');
+  if (bullets.length > 0) return bullets;
+  const inline = md.match(/Optimizing-for:\s*(.+)/i);
+  return inline ? [inline[1].trim()] : [];
+}
+
+interface CheckboxCounts {
+  total: number;
+  checked: number;
+  unchecked: string[];
+}
+
+function countCheckboxes(body: string): CheckboxCounts {
+  let total = 0;
+  let checked = 0;
+  const unchecked: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
+    if (!match) continue;
+    total += 1;
+    if (match[1].toLowerCase() === 'x') checked += 1;
+    else unchecked.push(match[2].trim());
+  }
+  return { total, checked, unchecked };
+}
+
+/** Reads and parses a workpad file. Returns null if missing/unreadable (fail open — caller omits the section). */
+function readWorkpadState(repoRoot: string, workpadRelPath: string): ContextWorkpadState | null {
+  const abs = path.join(repoRoot, workpadRelPath);
+  if (!existsSync(abs)) return null;
+  let text: string;
+  try {
+    text = readFileSync(abs, 'utf8');
+  } catch {
+    return null;
+  }
+  const fm = parseWorkpadFrontmatter(text);
+  const plan = countCheckboxes(markdownSectionBody(text, 'Plan'));
+  const acceptance = countCheckboxes(markdownSectionBody(text, 'Acceptance Criteria'));
+  const validation = countCheckboxes(markdownSectionBody(text, 'Validation'));
+  return {
+    path: workpadRelPath,
+    item: fm.item,
+    opened: fm.opened,
+    last_updated: fm.last_updated,
+    env: fm.env,
+    plan: { total: plan.total, checked: plan.checked, unchecked_preview: plan.unchecked.slice(0, 5) },
+    acceptance_criteria: { total: acceptance.total, checked: acceptance.checked },
+    validation: { total: validation.total, checked: validation.checked },
+  };
+}
+
+function workpadResult(repoRoot: string, workpadPath: string | undefined): ContextWorkpadResult {
+  if (!workpadPath) return { exists: false };
+  const state = readWorkpadState(repoRoot, workpadPath);
+  if (!state) return { exists: false };
+  return { exists: true, ...state };
+}
+
+/**
+ * "Last activity" date for an item: the workpad's `last_updated` if a workpad
+ * exists and parses, else the most recent dated bullet in `notes:`. Returns null
+ * when neither yields a date — staleness is indeterminate, not "fresh", in that case.
+ */
+function activityDateForItem(repoRoot: string, item: Item): Date | null {
+  if (item.workpad) {
+    const workpad = readWorkpadState(repoRoot, item.workpad);
+    if (workpad?.last_updated) {
+      const parsed = new Date(`${workpad.last_updated}T00:00:00.000Z`);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
+  return mostRecentDateIn(normalizeNotes(item.notes));
+}
+
+function splitLayerRef(defaultScopeId: string, ref: string): { scopeId: string; layerId: string } {
+  if (ref.includes(':')) {
+    const [scopeId, layerId] = ref.split(':', 2);
+    return { scopeId, layerId };
+  }
+  return { scopeId: defaultScopeId, layerId: ref };
+}
+
+/** The item's own layer(s) — `layer` if set, else `layers`. Does NOT include `affects`. */
+function primaryLayerRefs(defaultScopeId: string, item: Item): Array<{ scopeId: string; layerId: string }> {
+  const raw = item.layer ? [item.layer] : (item.layers ?? []);
+  return raw.map((ref) => splitLayerRef(defaultScopeId, ref));
+}
+
+function layerConstraintsFor(repoRoot: string, scopeId: string, layerId: string): ContextLayerConstraints | null {
+  const content = readLayerContent(repoRoot, scopeId, layerId);
+  if (!content.intentMd) return null;
+  return {
+    scope: scopeId,
+    layer: layerId,
+    optimizing_for: parseOptimizingFor(content.intentMd),
+    anti_responsibilities: parseBulletSection(content.intentMd, 'Anti-responsibilities'),
+    boundaries: parseBulletSection(content.intentMd, 'Boundaries'),
+    invariants: parseBulletSection(content.intentMd, 'Invariants'),
+  };
+}
+
+function allItemEntries(state: TenboState): Array<{ scope: string; item: Item }> {
+  const out: Array<{ scope: string; item: Item }> = [];
+  for (const scope of state.scopes) {
+    for (const item of scope.items) out.push({ scope: scope.id, item });
+  }
+  for (const item of state.crossCuttingRoadmap ?? []) out.push({ scope: 'cross-cutting', item });
+  return out;
+}
+
+const PENDING_RECONCILIATION_CAP = 12;
+const PENDING_RECONCILIATION_REL_PATH = '.tenbo/.pending-reconciliation.yaml';
+
+/**
+ * `.tenbo/.pending-reconciliation.yaml` summary (td-036): total `count` (unbounded,
+ * unchanged from the pre-td-036 shape) plus a bounded, deterministically-ordered
+ * per-entry `{ layer, kind }` breakdown. Reuses `readPendingReconciliation`
+ * (reconciliationFlag.ts) rather than re-parsing the YAML here — that helper is
+ * already fail-open (missing/malformed file → `[]`, never throws), so this never
+ * throws either. Sorted by layer, then kind, then opened_at for a stable order
+ * before truncating to PENDING_RECONCILIATION_CAP.
+ */
+function pendingReconciliationSummary(repoRoot: string): ContextPendingReconciliation {
+  const entries = readPendingReconciliation(repoRoot);
+  const sorted = [...entries].sort((a, b) =>
+    a.layer.localeCompare(b.layer) || a.kind.localeCompare(b.kind) || a.opened_at.localeCompare(b.opened_at));
+  return {
+    count: entries.length,
+    path: PENDING_RECONCILIATION_REL_PATH,
+    entries: sorted.slice(0, PENDING_RECONCILIATION_CAP).map((entry) => ({ layer: entry.layer, kind: entry.kind })),
+  };
+}
+
+/**
+ * Cheap validation delta: compares a fresh `validate(state)` run's issue counts against
+ * the previous `.tenbo/.validation-status.json` snapshot's counts. This is a count delta,
+ * not an identity-diff (see `validate-cli.ts`'s `computeDiff` for that) — cheap and
+ * sufficient for a session briefing. Omitted when no prior snapshot exists.
+ */
+function validationDeltaSummary(repoRoot: string, state: TenboState): ContextValidationDelta | undefined {
+  const abs = path.join(repoRoot, '.tenbo', '.validation-status.json');
+  if (!existsSync(abs)) return undefined;
+  let prev: { generated_at?: string; errors?: unknown[]; warnings?: unknown[] } | null = null;
+  try {
+    prev = JSON.parse(readFileSync(abs, 'utf8'));
+  } catch {
+    return undefined;
+  }
+  if (!prev) return undefined;
+  const previousErrors = Array.isArray(prev.errors) ? prev.errors.length : 0;
+  const previousWarnings = Array.isArray(prev.warnings) ? prev.warnings.length : 0;
+  const result = validate(state);
+  return {
+    generated_at: prev.generated_at ?? '',
+    previous_errors: previousErrors,
+    previous_warnings: previousWarnings,
+    current_errors: result.errors.length,
+    current_warnings: result.warnings.length,
+    new_errors: Math.max(0, result.errors.length - previousErrors),
+    new_warnings: Math.max(0, result.warnings.length - previousWarnings),
+  };
+}
+
+/** Most recent bullets from `.tenbo/observations.md`, preferring ones dated within `maxDays`. Omitted when absent. */
+function recentObservationsList(repoRoot: string, now: Date, maxDays = 7): string[] | undefined {
+  const abs = path.join(repoRoot, '.tenbo', 'observations.md');
+  if (!existsSync(abs)) return undefined;
+  let text: string;
+  try {
+    text = readFileSync(abs, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const bullets = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('-'));
+  const recent = bullets.filter((line) => {
+    const date = mostRecentDateIn(line);
+    return date ? daysSince(date, now) <= maxDays : true;
+  });
+  const pool = recent.length > 0 ? recent : bullets;
+  return pool.slice(-OBSERVATIONS_CAP);
+}
+
+const DOC_STALENESS_CAP = 12;
+
+/**
+ * Doc-staleness signal (td-027): every layer's `code-map.md` generated region
+ * checked against the current source index via `isLayerCodeMapStale` (td-026),
+ * capped to DOC_STALENESS_CAP. Fail-open — reuses `checkSourceIndexFreshness`'s
+ * existing 'fresh' gate (same pattern `resolveFeatureContext` uses for
+ * `sourceQuery`): when the index is missing/stale/corrupt/incompatible, this
+ * returns an empty result rather than computing anything, and the caller's
+ * existing `sourceIndexWarning` already explains why in `warnings` — no
+ * separate warning needed here. A single layer's check throwing is swallowed
+ * per-layer so one bad layer doesn't blank out the rest.
+ */
+function docStalenessSummary(
+  repoRoot: string,
+  state: TenboState,
+  sourceFreshness: ReturnType<typeof checkSourceIndexFreshness>,
+  index: SourceIndex | null,
+): ContextDocStaleness {
+  if (sourceFreshness.status !== 'fresh' || !index) {
+    return { stale_layers: [], checked_layers: 0 };
+  }
+  const staleLayers: ContextDocStaleLayerRef[] = [];
+  let checked = 0;
+  for (const scope of state.scopes) {
+    for (const layer of scope.layers) {
+      checked += 1;
+      let result: ReturnType<typeof isLayerCodeMapStale>;
+      try {
+        result = isLayerCodeMapStale(repoRoot, index, scope, layer);
+      } catch {
+        continue; // Fail open — one layer's check erroring never blanks the rest.
+      }
+      if (result.stale) {
+        staleLayers.push({ scope: scope.id, layer: layer.id, reason: result.reason ?? 'code-map region stale' });
+      }
+    }
+  }
+  return { stale_layers: staleLayers.slice(0, DOC_STALENESS_CAP), checked_layers: checked };
+}
+
+/**
+ * `session` intent — deterministic session-gate briefing bundle. Fail-open: every
+ * section beyond `now`/`stale`/`warnings` is optional and omitted (not errored)
+ * when its source file is absent. All lists bounded to SESSION_LIST_CAP (12,
+ * matching `read_plan`'s cap) except `recent_observations` (OBSERVATIONS_CAP, 5)
+ * and `doc_staleness.stale_layers` (DOC_STALENESS_CAP, 12).
+ */
+export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {}): SessionContextBundle {
+  const now = opts.now ?? new Date();
+  const state = readState(repoRoot);
+  const { staleNowDays, staleNextDays } = readThresholds(state.workspaceContent.principlesMd);
+  const entries = allItemEntries(state);
+
+  const nowEntries = entries
+    .filter((entry) => entry.item.status === 'now')
+    .map((entry) => ({ ...entry, activity: activityDateForItem(repoRoot, entry.item) }))
+    .sort((a, b) => comparePriority(a.item, b.item) || a.item.id.localeCompare(b.item.id));
+
+  const nextEntries = entries
+    .filter((entry) => entry.item.status === 'next')
+    .map((entry) => ({ ...entry, activity: activityDateForItem(repoRoot, entry.item) }));
+
+  const nowItems: ContextSessionItemRef[] = nowEntries.slice(0, SESSION_LIST_CAP).map((entry) => ({
+    id: entry.item.id,
+    scope: entry.scope,
+    title: entry.item.title,
+    days_active: entry.activity ? daysSince(entry.activity, now) : null,
+  }));
+
+  // `staleNow` deliberately keeps `nowEntries`'s existing priority order (no extra
+  // sort by staleness) — for `now` items, priority order is the meaningful surfacing
+  // order for a session briefing. `staleNext` below sorts by staleness-descending
+  // first since `next` items have no comparable in-flight priority signal yet.
+  const staleNow: ContextStaleItemRef[] = nowEntries
+    .filter((entry): entry is typeof entry & { activity: Date } => entry.activity !== null && daysSince(entry.activity, now) > staleNowDays)
+    .slice(0, SESSION_LIST_CAP)
+    .map((entry) => ({
+      id: entry.item.id,
+      scope: entry.scope,
+      title: entry.item.title,
+      days_active: daysSince(entry.activity, now),
+      threshold_days: staleNowDays,
+    }));
+
+  const staleNext: ContextStaleItemRef[] = nextEntries
+    .filter((entry): entry is typeof entry & { activity: Date } => entry.activity !== null && daysSince(entry.activity, now) > staleNextDays)
+    .sort((a, b) => daysSince(b.activity, now) - daysSince(a.activity, now))
+    .slice(0, SESSION_LIST_CAP)
+    .map((entry) => ({
+      id: entry.item.id,
+      scope: entry.scope,
+      title: entry.item.title,
+      days_active: daysSince(entry.activity, now),
+      threshold_days: staleNextDays,
+    }));
+
+  const pendingReconciliation = pendingReconciliationSummary(repoRoot);
+  const validationDelta = validationDeltaSummary(repoRoot, state);
+  const observations = recentObservationsList(repoRoot, now);
+
+  const workpadResume: ContextWorkpadResumeCandidate[] = entries
+    .filter((entry) => entry.item.workpad)
+    .map((entry) => ({ entry, workpad: readWorkpadState(repoRoot, entry.item.workpad as string) }))
+    .filter((row): row is { entry: typeof entries[number]; workpad: ContextWorkpadState } =>
+      row.workpad !== null && row.workpad.plan.total > 0 && row.workpad.plan.checked < row.workpad.plan.total)
+    .slice(0, SESSION_LIST_CAP)
+    .map(({ entry, workpad }) => ({
+      item_id: entry.item.id,
+      scope: entry.scope,
+      title: entry.item.title,
+      workpad: workpad.path,
+      unchecked_plan_items: workpad.plan.total - workpad.plan.checked,
+    }));
+
+  const sourceIndex = readSourceIndex(repoRoot);
+  const sourceFreshness = checkSourceIndexFreshness(repoRoot, sourceIndex);
+  const sourceWarning = sourceIndexWarning(sourceFreshness);
+  const docStaleness = docStalenessSummary(repoRoot, state, sourceFreshness, sourceIndex);
+
+  return {
+    ok: true,
+    intent: 'session',
+    now: { count: nowEntries.length, items: nowItems },
+    stale: { now: staleNow, next: staleNext },
+    pending_reconciliation: pendingReconciliation,
+    ...(validationDelta ? { validation_delta: validationDelta } : {}),
+    ...(workpadResume.length > 0 ? { workpad_resume: workpadResume } : {}),
+    ...(observations && observations.length > 0 ? { recent_observations: observations } : {}),
+    doc_staleness: docStaleness,
+    warnings: [
+      ...agentContextWarnings(repoRoot, now),
+      ...(sourceWarning ? [sourceWarning] : []),
+    ],
+  };
+}
+
+/**
+ * `item` intent — deterministic per-item bundle: core fields, layer constraints for
+ * the item's own layer(s), a bounded read plan (reusing the feature path's
+ * `buildReadPlan`), and workpad state if one exists. Throws `RoadmapStoreError`
+ * (`not_found`) via `findItem` when the id doesn't resolve — surfaced by the CLI's
+ * existing error handling, same as other `item` subcommands.
+ */
+export function resolveItemContext(repoRoot: string, itemId: string, opts: ResolveOptions = {}): ItemContextBundle {
+  const now = opts.now ?? new Date();
+  const located = findItem(repoRoot, itemId);
+  const item = located.item;
+
+  const layerRefs = primaryLayerRefs(located.scopeId, item).slice(0, LAYER_CONSTRAINTS_CAP);
+  const layerDocs = layerRefs.flatMap(({ scopeId, layerId }) => [
+    repoRelative('.tenbo', 'scopes', scopeId, 'layers', layerId, 'intent.md'),
+    repoRelative('.tenbo', 'scopes', scopeId, 'layers', layerId, 'code-map.md'),
+  ]);
+  const layerConstraints = layerRefs
+    .map(({ scopeId, layerId }) => layerConstraintsFor(repoRoot, scopeId, layerId))
+    .filter((entry): entry is ContextLayerConstraints => entry !== null);
+
+  const filesToRead = item.files_to_read ?? [];
+  const readPlan = buildReadPlan({
+    layerDocs,
+    activeItems: [{ scope: located.scopeId, item, score: 0 }],
+    matchingItems: [],
+    sourceEvidence: [],
+    filesToRead,
+  });
+
+  const sourceFreshness = checkSourceIndexFreshness(repoRoot, readSourceIndex(repoRoot));
+  const sourceWarning = sourceIndexWarning(sourceFreshness);
+
+  return {
+    ok: true,
+    intent: 'item',
+    item_id: item.id,
+    scope: located.scopeId,
+    item: summarizeItem(item, 'execution'),
+    layer_constraints: layerConstraints,
+    context: {
+      layer_docs: layerDocs,
+      files_to_read: filesToRead,
+      read_plan: readPlan,
+      verification_plan: buildVerificationPlan(),
+    },
+    workpad: workpadResult(repoRoot, item.workpad),
     warnings: [
       ...agentContextWarnings(repoRoot, now),
       ...(sourceWarning ? [sourceWarning] : []),

@@ -1,21 +1,76 @@
-import {
-  addItemNote,
-  completeItem,
-  findItem,
-  linkItemCommit,
-  setItemDocUpdate,
-  setItemStatus,
-  setItemVerification,
-} from '../src/api/lib/roadmapStore';
+import { randomUUID } from 'node:crypto';
+import { findItem, type WriteResult } from '../src/api/lib/roadmapStore';
 import { summarizeItem } from '../src/api/lib/itemProjection';
 import { checkItemEvidence } from '../src/api/lib/itemEvidence';
+import {
+  doneWhenText,
+  formatCheckEvidence,
+  isStructuredDoneWhen,
+  runDoneWhenChecks,
+  summarizeDoneWhenResults,
+} from '../src/api/lib/doneWhenChecks';
+import { discoverHub } from '../src/api/lib/hub/discover';
+import { sendHubMutation } from '../src/api/lib/hub/client';
+import { applyMutation, type MutationOp, type MutationRequest } from '../src/api/lib/hub/mutations';
+import { resolveAgentIdentity } from '../src/api/lib/hub/identity';
+import { readJournal } from '../src/api/lib/hub/journal';
 import { hasFlag, positionalArgs, readOption, readRepeated } from './cliArgs';
 import { handleCliError, isMain, misuse, ok, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
 import { findItemCommand, formatItemCommandHelp, formatItemHelp } from './itemCommandRegistry.mjs';
 
-export function runItemCli(repoRoot: string, args: string[]): CliResult {
+const HUB_FALLBACK_NOTICE = 'note: no tenbo hub running, writing files directly\n';
+
+// Every value-taking flag across item subcommands, so positionalArgs can
+// tell them apart from boolean flags (--json, --help, --check, --skipped)
+// regardless of where a flag appears relative to the positionals (td-032).
+const VALUE_FLAGS = [
+  '--agent',
+  '--status',
+  '--evidence',
+  '--note',
+  '--date',
+  '--reason',
+  '--doc-update',
+  '--commit',
+  '--verification',
+];
+
+/**
+ * Route one mutation through a live, repo-matched hub if `discoverHub` finds
+ * one; otherwise (or on ANY hub error — network failure, timeout, hub-side
+ * rejection) fail open to the exact same direct `roadmapStore` write the CLI
+ * has always performed, via `applyMutation`. The hub is never allowed to
+ * block a mutation from landing — see .tenbo/specs/x-004 for the design.
+ *
+ * `mutationId` and `agent` (td-030) are resolved ONCE here, at the CLI
+ * boundary, and reused for both the hub attempt and the fallback attempt —
+ * this is what makes the fallback idempotent: if the hub actually committed
+ * the mutation but its HTTP response was lost, the fallback's `applyMutation`
+ * call carries the SAME mutation id, sees it already journaled, and returns
+ * the current state instead of double-applying.
+ */
+async function performMutation(repoRoot: string, op: MutationOp, agent: string): Promise<WriteResult> {
+  const req: MutationRequest = { ...op, mutationId: randomUUID(), agent };
+  let hub;
+  try {
+    hub = await discoverHub(repoRoot);
+  } catch {
+    hub = null;
+  }
+  if (hub) {
+    try {
+      return await sendHubMutation(hub, req);
+    } catch {
+      // Fall through to the direct-write fallback below.
+    }
+  }
+  process.stderr.write(HUB_FALLBACK_NOTICE);
+  return applyMutation(repoRoot, req);
+}
+
+export async function runItemCli(repoRoot: string, args: string[]): Promise<CliResult> {
   const json = hasFlag(args, '--json');
-  const [command, itemId, value] = positionalArgs(args);
+  const [command, itemId, value] = positionalArgs(args, { valueFlags: VALUE_FLAGS });
 
   if (hasFlag(args, '--help') || command === 'help') {
     const helpCommand = command === 'help' ? itemId : command;
@@ -32,6 +87,8 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
     const definition = findItemCommand(command);
     return misuse(definition ? `Usage: ${definition.usage}` : `unknown item command: ${command}`, json);
   }
+
+  const agent = resolveAgentIdentity({ agentFlag: readOption(args, '--agent') });
 
   try {
     if (command === 'show') {
@@ -62,7 +119,7 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       const located = findItem(repoRoot, itemId);
       const item = located.item;
       const files = item.files_to_read?.length ? item.files_to_read.map((file) => `- ${file}`).join('\n') : '- Read the linked item/spec first.';
-      const criteria = item.done_when?.length ? item.done_when.map((entry) => `- ${entry}`).join('\n') : '- Satisfy the roadmap item description.';
+      const criteria = item.done_when?.length ? item.done_when.map((entry) => `- ${doneWhenText(entry)}`).join('\n') : '- Satisfy the roadmap item description.';
       const risks = item.risks?.length ? item.risks.map((entry) => `- ${entry}`).join('\n') : '- No known overlap risks recorded.';
       const prompt = [
         `Implement ${item.id}: ${item.title}`,
@@ -93,28 +150,65 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
 
     if (command === 'set-status') {
       if (!value) return misuse(`Usage: ${findItemCommand('set-status')?.usage ?? 'tenbo-dashboard item set-status <id> <status>'}`, json);
-      const result = setItemStatus(repoRoot, itemId, value);
+      const result = await performMutation(repoRoot, { op: 'set-status', itemId, status: value }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} status: ${result.item.status}\n`);
     }
 
     if (command === 'add-note') {
       if (!value) return misuse(`Usage: ${findItemCommand('add-note')?.usage ?? 'tenbo-dashboard item add-note <id> <note>'}`, json);
-      const result = addItemNote(repoRoot, itemId, value);
+      const result = await performMutation(repoRoot, { op: 'add-note', itemId, note: value }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} note added\n`);
     }
 
     if (command === 'verify') {
       if (hasFlag(args, '--check')) {
-        const report = checkItemEvidence(repoRoot, itemId);
-        return serialize(report, json, `${itemId} evidence: ${report.verdict}\n`);
+        const evidenceReport = checkItemEvidence(repoRoot, itemId);
+        const located = findItem(repoRoot, itemId);
+        const doneWhen = located.item.done_when ?? [];
+        const structuredCount = doneWhen.filter(isStructuredDoneWhen).length;
+
+        if (structuredCount === 0) {
+          // No machine-checkable done_when entries: preserve the pre-x-003
+          // evidence-heuristic behavior exactly — no execution, no mutation.
+          return serialize(evidenceReport, json, `${itemId} evidence: ${evidenceReport.verdict}\n`);
+        }
+
+        // x-003: this is the ONLY path in the codebase that executes an
+        // item-authored shell command, and it runs ONLY because the caller
+        // passed `--check` to `item verify` explicitly. See doneWhenChecks.ts
+        // for the strict-timeout mechanism and the full trust model.
+        const results = await runDoneWhenChecks(repoRoot, doneWhen);
+        const summary = summarizeDoneWhenResults(results);
+        const status = summary.passed ? 'verified' : 'failed';
+        const evidence = results.map(formatCheckEvidence);
+        const passedCount = summary.checkedCount - summary.failedCount;
+        const note = `item verify --check: ${passedCount}/${summary.checkedCount} structured check(s) passed, ${summary.manualCount} manual entr${summary.manualCount === 1 ? 'y' : 'ies'} not executed`;
+        const mutated = await performMutation(repoRoot, { op: 'verify', itemId, status, evidence, note }, agent);
+
+        const report = {
+          ...evidenceReport,
+          passed: summary.passed,
+          checked_count: summary.checkedCount,
+          manual_count: summary.manualCount,
+          failed_count: summary.failedCount,
+          results,
+          verification: mutated.item.verification,
+        };
+        return serialize(
+          report,
+          json,
+          `${itemId} check: ${summary.passed ? 'passed' : 'failed'} (${passedCount}/${summary.checkedCount} checks, ${summary.manualCount} manual)\n`,
+        );
       }
       const status = readOption(args, '--status');
       if (!status) return misuse(`Usage: ${findItemCommand('verify')?.usage ?? 'tenbo-dashboard item verify <id> --status <status>'}`, json);
-      const result = setItemVerification(repoRoot, itemId, {
+      const result = await performMutation(repoRoot, {
+        op: 'verify',
+        itemId,
         status,
         evidence: readRepeated(args, '--evidence'),
         note: readOption(args, '--note'),
-      });
+      }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} verification: ${result.item.verification?.status}\n`);
     }
 
@@ -126,7 +220,7 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       if (skipped && !reason) return misuse('Usage: tenbo-dashboard item doc-update <id> --skipped --reason "<text>"', json);
       const today = new Date().toISOString().slice(0, 10);
       const docUpdate = skipped ? `skipped — ${reason}` : date === 'today' ? today : date;
-      const result = setItemDocUpdate(repoRoot, itemId, docUpdate ?? today);
+      const result = await performMutation(repoRoot, { op: 'doc-update', itemId, docUpdate: docUpdate ?? today }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} doc_update: ${result.item.doc_update}\n`);
     }
 
@@ -138,19 +232,37 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
       if (evidence.length === 0) return misuse(`Usage: ${findItemCommand('complete')?.usage ?? 'tenbo-dashboard item complete <id> --evidence "<text>"'}`, json);
       const today = new Date().toISOString().slice(0, 10);
       const docUpdate = docUpdateArg === 'today' ? today : docUpdateArg;
-      const result = completeItem(repoRoot, itemId, {
+      const result = await performMutation(repoRoot, {
+        op: 'complete',
+        itemId,
         evidence,
         ...(docUpdate ? { docUpdate } : {}),
         ...(commit ? { commit } : {}),
         ...(verificationStatus ? { verificationStatus } : {}),
-      });
+      }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} completed\n`);
     }
 
     if (command === 'link-commit') {
       if (!value) return misuse(`Usage: ${findItemCommand('link-commit')?.usage ?? 'tenbo-dashboard item link-commit <id> <sha>'}`, json);
-      const result = linkItemCommit(repoRoot, itemId, value);
+      const result = await performMutation(repoRoot, { op: 'link-commit', itemId, commit: value }, agent);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} linked commit: ${value}\n`);
+    }
+
+    if (command === 'history') {
+      // Reads the append-only journal directly (see hub/journal.ts) —
+      // "who changed item X and when" (td-030). No hub routing: the journal
+      // lives on disk under the shared hub repo root regardless of which
+      // process (hub or direct writer) appended each event, so a plain read
+      // is always accurate. Validate the item exists first (like every
+      // sibling command) so a typo'd id returns a structured not_found
+      // error instead of masquerading as "no history yet".
+      findItem(repoRoot, itemId);
+      const events = readJournal(repoRoot, { itemId });
+      const text = events.length === 0
+        ? `${itemId}: no journal history\n`
+        : `${events.map((event) => `${event.timestamp} ${event.actor} ${event.operation} (${event.mutationId})`).join('\n')}\n`;
+      return serialize({ ok: true, item_id: itemId, events }, json, text);
     }
 
     return misuse(`unknown item command: ${command}`, json);
@@ -160,5 +272,5 @@ export function runItemCli(repoRoot: string, args: string[]): CliResult {
 }
 
 if (isMain(import.meta.url)) {
-  runMain(runItemCli(repoRootFromCwd(), process.argv.slice(2)));
+  runMain(await runItemCli(repoRootFromCwd(), process.argv.slice(2)));
 }

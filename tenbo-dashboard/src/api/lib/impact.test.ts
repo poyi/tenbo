@@ -95,6 +95,59 @@ describe('impact analysis', () => {
     expect(summary.sources).toEqual(expect.arrayContaining(['since', 'worktree', 'status']));
   });
 
+  it('commitOnly: maps ONLY the committed range, excluding unstaged/staged/untracked working-tree state', () => {
+    // Commit touches only src/app.ts.
+    write('apps/editor/src/app.ts', 'export const value = 2;\n');
+    git(['add', '.']);
+    git(['commit', '-m', 'touch app']);
+
+    // Dirty the tree after the commit: untracked, unstaged-modified, and
+    // staged-but-uncommitted files that a plain (non-commitOnly) call
+    // would pick up via the worktree/staged/status sources.
+    write('apps/editor/src/untracked.ts');
+    write('apps/editor/scripts/staged.ts');
+    git(['add', 'apps/editor/scripts/staged.ts']);
+    write('apps/editor/src/app.ts', 'export const value = 3;\n'); // unstaged modification on top of the commit
+
+    const commitOnly = collectChangedFiles(dir, { since: 'HEAD~1', commitOnly: true });
+    expect(commitOnly.compared_ref).toBe('HEAD~1');
+    expect(commitOnly.changed_files).toEqual(['apps/editor/src/app.ts']);
+    expect(commitOnly.sources).toEqual(['since']);
+
+    // Sanity check: the plain (non-commitOnly) call on the SAME dirty tree
+    // still picks up the working-tree files — proving commitOnly changed
+    // behavior deliberately, not because the tree happened to be clean.
+    const full = collectChangedFiles(dir, { since: 'HEAD~1' });
+    expect(full.changed_files).toEqual(expect.arrayContaining([
+      'apps/editor/src/untracked.ts',
+      'apps/editor/scripts/staged.ts',
+    ]));
+  });
+
+  it('commitOnly is fail-open on a root commit with no HEAD~1: empty set, warning, no throw', () => {
+    // `dir` only has the single initial commit from beforeEach.
+    const summary = collectChangedFiles(dir, { commitOnly: true });
+    expect(summary.changed_files).toEqual([]);
+    expect(summary.sources).toEqual([]);
+    expect(summary.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('resolveImpact WITHOUT commitOnly still includes working-tree changes (no regression to the plain impact command)', () => {
+    write('apps/editor/src/app.ts', 'export const value = 2;\n');
+    git(['add', '.']);
+    git(['commit', '-m', 'touch app']);
+
+    // Untracked file left dirty in the tree, never committed.
+    write('apps/editor/scripts/build.ts');
+
+    const impact = resolveImpact(dir);
+
+    expect(impact.changed_files).toContain('apps/editor/scripts/build.ts');
+    expect(impact.affected_layers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scope: 'editor', layer: 'tools' }),
+    ]));
+  });
+
   it('maps changed files to layers stale docs related items and uncovered files', () => {
     write('apps/editor/src/app.ts', 'export const changed = true;\n');
     write('apps/editor/scripts/build.ts');

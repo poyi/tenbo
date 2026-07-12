@@ -79,6 +79,37 @@ describe('roadmapStore', () => {
     expect(readFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), 'utf8')).toContain('status: now');
   });
 
+  it('round-trips mixed plain-string and structured done_when entries unchanged across an unrelated mutation (x-003)', () => {
+    writeFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), [
+      'items:',
+      '  - id: ed-001',
+      '    title: First',
+      '    layer: app',
+      '    status: next',
+      '    description: first item',
+      '    done_when:',
+      '      - Plain-string bullet.',
+      '      - text: structured bullet',
+      '        check:',
+      '          run: "true"',
+      '          expect_exit: 0',
+      '          timeout_ms: 5000',
+      '',
+    ].join('\n'));
+
+    const result = setItemStatus(dir, 'ed-001', 'now');
+
+    expect(result.item.status).toBe('now');
+    expect(result.item.done_when).toEqual([
+      'Plain-string bullet.',
+      { text: 'structured bullet', check: { run: 'true', expect_exit: 0, timeout_ms: 5000 } },
+    ]);
+    const onDisk = readFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), 'utf8');
+    expect(onDisk).toContain('Plain-string bullet.');
+    expect(onDisk).toContain('text: structured bullet');
+    expect(onDisk).toContain('run: "true"');
+  });
+
   it('rejects a mutation when the roadmap file changes before write', () => {
     expect(() => setItemStatus(dir, 'ed-001', 'now', {
       beforeWrite: () => appendFileSync(path.join(dir, '.tenbo/scopes/editor/roadmap.yaml'), '# concurrent change\n'),

@@ -53,6 +53,13 @@ interface RoadmapFileRef {
 
 interface MutationOptions {
   beforeWrite?: () => void;
+  /**
+   * Resolved agent identity (see hub/identity.ts) attributing this mutation.
+   * When present, note text and verification evidence are stamped with it;
+   * when absent (internal/system callers, or older call sites that predate
+   * td-030), behavior is unchanged from before attribution existed.
+   */
+  actor?: string;
 }
 
 const STATUSES: readonly Status[] = ['now', 'next', 'later', 'done', 'dropped'];
@@ -168,6 +175,19 @@ export function findItem(repoRoot: string, itemId: string): LocatedItem {
   return { scopeId: ref.scopeId, filePath: ref.filePath, item };
 }
 
+/**
+ * Build a `WriteResult` from the item's CURRENT on-disk state, without
+ * mutating anything. Used by `applyMutation`'s idempotency check (td-030):
+ * when a mutation id has already been journaled, the mutation already
+ * landed on a prior attempt, so the correct "re-apply" response is simply
+ * the current state, not a second write.
+ */
+export function currentWriteResult(repoRoot: string, itemId: string): WriteResult {
+  const located = findItem(repoRoot, itemId);
+  const validation = validate(readState(repoRoot));
+  return { scopeId: located.scopeId, filePath: located.filePath, item: located.item, validation };
+}
+
 export function setItemStatus(repoRoot: string, itemId: string, status: Status | string, opts?: MutationOptions): WriteResult {
   const nextStatus = validateStatus(status);
   return mutateItem(repoRoot, itemId, () => ({ status: nextStatus }), opts);
@@ -181,10 +201,11 @@ export function addItemNote(
 ): WriteResult {
   const now = opts.now ?? (() => new Date());
   const date = now().toISOString().slice(0, 10);
+  const stamp = opts.actor ? `${date} [${opts.actor}]` : date;
   return mutateItem(repoRoot, itemId, (item) => {
     const existing = normalizeNotes(item.notes);
     const prefix = existing.length > 0 ? `${existing}\n` : '';
-    return { notes: `${prefix}- ${date}: ${note}` };
+    return { notes: `${prefix}- ${stamp}: ${note}` };
   }, opts);
 }
 
@@ -206,6 +227,7 @@ export function setItemVerification(
       updated_at: now().toISOString(),
       ...(opts.evidence && opts.evidence.length > 0 ? { evidence: opts.evidence } : {}),
       ...(opts.note ? { note: opts.note } : {}),
+      ...(opts.actor ? { actor: opts.actor } : {}),
     },
   }), opts);
 }
@@ -237,10 +259,11 @@ export function completeItem(
   const date = now().toISOString().slice(0, 10);
   const updatedAt = now().toISOString();
   const status = validateVerificationStatus(opts.verificationStatus ?? 'verified');
+  const stamp = opts.actor ? `${date} [${opts.actor}]` : date;
   return mutateItem(repoRoot, itemId, (item) => {
     const existingNotes = normalizeNotes(item.notes);
     const evidenceText = opts.evidence.length ? opts.evidence.join('; ') : 'No evidence supplied';
-    const note = `- ${date}: Completed with evidence: ${evidenceText}`;
+    const note = `- ${stamp}: Completed with evidence: ${evidenceText}`;
     const links = item.links ?? [];
     const commitLink = opts.commit ? `commit:${opts.commit}` : undefined;
     return {
@@ -250,6 +273,7 @@ export function completeItem(
         status,
         updated_at: updatedAt,
         ...(opts.evidence.length ? { evidence: opts.evidence } : {}),
+        ...(opts.actor ? { actor: opts.actor } : {}),
       },
       ...(opts.docUpdate ? { doc_update: opts.docUpdate } : {}),
       ...(commitLink ? { links: links.includes(commitLink) ? links : [...links, commitLink] } : {}),

@@ -41,6 +41,7 @@ describe('bin output', () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('tenbo-dashboard item complete <id>');
+    expect(result.stdout).toContain('tenbo-dashboard code-map generate');
   });
 
   it('flushes large JSON output before exiting', () => {
@@ -138,7 +139,9 @@ describe('bin output', () => {
     const today = new Date().toISOString().slice(0, 10);
 
     expect(result.status).toBe(0);
-    expect(result.stderr).toBe('');
+    // td-029: mutating commands print a one-line fallback notice on stderr
+    // when no hub is running (no lockfile exists in this fresh tmp repo).
+    expect(result.stderr).toBe('note: no tenbo hub running, writing files directly\n');
     const payload = JSON.parse(result.stdout);
     expect(payload.item).toMatchObject({
       status: 'done',

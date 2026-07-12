@@ -97,4 +97,71 @@ describe('context CLI', () => {
       error: 'invalid_args',
     });
   });
+
+  it('prints session context as JSON', () => {
+    const result = runContextCli(dir, ['session', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload).toMatchObject({
+      ok: true,
+      intent: 'session',
+      now: { count: 0, items: [] },
+      stale: { now: [], next: [] },
+    });
+    expect(payload.warnings).toContainEqual(expect.objectContaining({ kind: 'missing_agent_context' }));
+  });
+
+  it('prints item context as JSON', () => {
+    const result = runContextCli(dir, ['item', 'td-010', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload).toMatchObject({
+      ok: true,
+      intent: 'item',
+      item_id: 'td-010',
+      scope: 'dashboard',
+      workpad: { exists: false },
+    });
+    expect(payload.layer_constraints).toEqual([
+      expect.objectContaining({ scope: 'dashboard', layer: 'cli-tools' }),
+    ]);
+    expect(payload.context.read_plan.length).toBeLessThanOrEqual(12);
+  });
+
+  it('prints item context as JSON when --json precedes the id (td-032)', () => {
+    // A boolean flag ahead of the positional must not swallow the id as its
+    // "value" — see cliArgs.ts positionalArgs valueFlags handling.
+    const result = runContextCli(dir, ['item', '--json', 'td-010']);
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload).toMatchObject({
+      ok: true,
+      intent: 'item',
+      item_id: 'td-010',
+      scope: 'dashboard',
+    });
+  });
+
+  it('rejects item context requests without an id', () => {
+    const result = runContextCli(dir, ['item', '--json']);
+
+    expect(result.exitCode).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: 'invalid_args',
+    });
+  });
+
+  it('surfaces not_found for an unknown item id', () => {
+    const result = runContextCli(dir, ['item', 'zz-999', '--json']);
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: 'not_found',
+    });
+  });
 });

@@ -43,6 +43,25 @@ export function readLayerContent(repoRoot: string, scopeId: string, layerId: str
   };
 }
 
+/** Absolute path to a named doc file (e.g. `code-map.md`) inside a layer's doc directory. */
+export function layerDocPath(repoRoot: string, scopeId: string, layerId: string, filename: string): string {
+  return path.join(tenboDir(repoRoot), 'scopes', scopeId, 'layers', layerId, filename);
+}
+
+/** Reads a single layer doc file (e.g. `code-map.md`). Returns null if it does not exist. */
+export function readLayerDocFile(repoRoot: string, scopeId: string, layerId: string, filename: string): string | null {
+  const file = layerDocPath(repoRoot, scopeId, layerId, filename);
+  if (!existsSync(file)) return null;
+  return readFileSync(file, 'utf8');
+}
+
+/** Atomically writes a single layer doc file (e.g. `code-map.md`), creating the layer directory if needed. */
+export function writeLayerDocFile(repoRoot: string, scopeId: string, layerId: string, filename: string, content: string): void {
+  const file = layerDocPath(repoRoot, scopeId, layerId, filename);
+  mkdirSync(path.dirname(file), { recursive: true });
+  atomicWrite(file, content);
+}
+
 export function tenboExists(repoRoot: string): boolean {
   return existsSync(path.join(tenboDir(repoRoot), 'workspace.yaml'));
 }
@@ -293,11 +312,31 @@ export function readGeneratedCacheFile(repoRoot: string, parts: string[]): strin
   return readFileSync(file, 'utf8');
 }
 
+/**
+ * Thrown by `patchItem` when the roadmap file on disk changed between the
+ * read and the write of a single patch (td-033's conflict guard, mirroring
+ * `roadmapStore.mutateItem`'s beforeHash check). The caller
+ * (`routes/items.ts`) now runs `patchItem` inside `enqueueMutation`, so no
+ * OTHER queued mutation can race it here — this only fires for a write that
+ * happened outside the queue entirely (a stray direct fs write, or a
+ * process bypassing the hub), which is rare but worth rejecting rather than
+ * silently clobbering.
+ */
+export class PatchConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PatchConflictError';
+  }
+}
+
 export function patchItem(repoRoot: string, scopeId: string, itemId: string, patch: Partial<Item>): void {
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
   const text = readFileSync(file, 'utf8');
   const doc = parseYaml(text);
   patchSeqItem(doc, 'items', itemId, patch as Record<string, unknown>);
+  if (readFileSync(file, 'utf8') !== text) {
+    throw new PatchConflictError(`roadmap changed while applying patch to ${itemId}`);
+  }
   atomicWrite(file, stringifyYaml(doc));
 }
 

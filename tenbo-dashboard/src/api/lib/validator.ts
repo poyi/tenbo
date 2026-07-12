@@ -1,5 +1,6 @@
 import type { TenboState, ValidateResult, ValidateIssue, Item } from '../../types';
 import { VALID_PHASE_STATUSES, isIsoDate } from './phases';
+import { MAX_CHECK_RUN_LENGTH, MAX_TIMEOUT_MS } from './doneWhenChecks';
 
 const FORBIDDEN_JARGON = [
   'module', 'API', 'endpoint', 'interface', 'abstraction', 'service',
@@ -258,6 +259,54 @@ export function validate(state: TenboState): ValidateResult {
       }
       if (item.status === 'now' && !item.done_when?.length) {
         warnings.push({ level: 'warning', message: `item "${item.id}" has status:now but no done_when criteria`, scope: scope.id, itemId: item.id });
+      }
+
+      // done_when shape validation (x-003). Each entry is either a plain
+      // string (unchanged legacy form — always valid) or a structured object
+      // `{ text, check: { run, expect_exit?, timeout_ms? } }`. This ONLY
+      // checks shape; it never executes `check.run` — execution happens
+      // exclusively behind the explicit `item verify --check` CLI command
+      // (see doneWhenChecks.ts).
+      if (item.done_when !== undefined) {
+        if (!Array.isArray(item.done_when)) {
+          errors.push({ level: 'error', message: `item "${item.id}" done_when must be a list`, scope: scope.id, itemId: item.id });
+        } else {
+          item.done_when.forEach((entry, idx) => {
+            if (typeof entry === 'string') return;
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}] must be a string or an object`, scope: scope.id, itemId: item.id });
+              return;
+            }
+            const e = entry as unknown as Record<string, unknown>;
+            if (typeof e.text !== 'string' || e.text.trim() === '') {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}] is missing a non-empty string "text"`, scope: scope.id, itemId: item.id });
+            }
+            if (e.check === undefined) {
+              // A structured entry without `check` is legal (equivalent to a manual criterion) — no diagnostic needed.
+              return;
+            }
+            if (!e.check || typeof e.check !== 'object' || Array.isArray(e.check)) {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check must be an object`, scope: scope.id, itemId: item.id });
+              return;
+            }
+            const check = e.check as Record<string, unknown>;
+            if (typeof check.run !== 'string' || check.run.trim() === '') {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check.run must be a non-empty string`, scope: scope.id, itemId: item.id });
+            } else if (check.run.length > MAX_CHECK_RUN_LENGTH) {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check.run (${check.run.length} chars) exceeds the ${MAX_CHECK_RUN_LENGTH}-char cap`, scope: scope.id, itemId: item.id });
+            }
+            if (check.expect_exit !== undefined && !Number.isInteger(check.expect_exit)) {
+              errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check.expect_exit must be an integer`, scope: scope.id, itemId: item.id });
+            }
+            if (check.timeout_ms !== undefined) {
+              if (!Number.isInteger(check.timeout_ms) || (check.timeout_ms as number) <= 0) {
+                errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check.timeout_ms must be a positive integer`, scope: scope.id, itemId: item.id });
+              } else if ((check.timeout_ms as number) > MAX_TIMEOUT_MS) {
+                errors.push({ level: 'error', message: `item "${item.id}" done_when[${idx}].check.timeout_ms (${check.timeout_ms}) exceeds the ${MAX_TIMEOUT_MS}ms cap`, scope: scope.id, itemId: item.id });
+              }
+            }
+          });
+        }
       }
       if (item.verification !== undefined) {
         const verification = item.verification as any;
