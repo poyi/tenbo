@@ -17,6 +17,7 @@ Subagents performing work on Tenbo's behalf MUST verify the bar in their report.
 An item MUST satisfy all of these before `status: done`:
 
 1. **`done_when:` evidence.** Every `done_when:` bullet has a corresponding completed signal — a checked workpad Plan or Acceptance Criteria item, OR (for lightweight items without a workpad) explicit confirmation from the user or subagent report.
+   **Structured checks (x-003):** if any `done_when:` bullet carries a `check:` (a `run` command with an expected exit), run `npx tenbo-dashboard item verify <id> --check --json` and treat a **failing structured check as a hard bar failure** — fix the underlying issue or `bar_override`; do not flip to done on a red check. Checks run only on this explicit verify (never at session start or during sync). A `passed: true` covers *only* the structured checks; prose (`manual`) bullets still need human/subagent judgment per the rest of this rule.
 2. **Workpad acceptance.** If a workpad exists, all Acceptance Criteria checkboxes are checked, OR each unchecked AC has a "deferred — `<reason>`" note immediately below it.
 3. **Workpad validation.** If a workpad exists, all Validation checkboxes are checked, OR validation is documented as N/A in a note.
 4. **`doc_update` stamp.** Field is present: ISO date if surfaces changed, `skipped — <reason>` if internal-only. Required for feature/bug/refactor items.
