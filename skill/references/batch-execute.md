@@ -128,6 +128,11 @@ For each item:
    ```
    The worker has normal coding capability scoped to the workspace and the
    prompt's file ownership. In Codex, make file ownership explicit and disjoint.
+   **Attribution:** give each worker an agent identity so its PM mutations are
+   traceable — set `TENBO_AGENT=<item-id>` (or a worker label) in the dispatch
+   brief's environment, or instruct the worker to pass `--agent <label>` on its
+   `tenbo-dashboard item` calls. The hub/journal records who did what, which is
+   what makes parallel batch execution auditable.
 6. **Receive structured report.** The worker returns the 9-section report
    (files changed, approach, AC status, verification, noticed-but-not-fixed,
    open questions, doc updates, workpad updates, completion bar per rule).
@@ -135,7 +140,9 @@ For each item:
    `references/completion-sync.md`:
    - Branch on continuation flag (partial vs final report).
    - Cross-check `done_when:` evidence against report claims.
-   - Verify completion bar rules.
+   - Verify completion bar rules — including running `item verify <id> --check` when any
+     `done_when:` bullet carries a structured `check:`; a failing check blocks completion
+     (fix or `bar_override`), so a worker can't falsely report a red item as done.
    - Apply doc updates (`code-map.md`, `intent.md`, `doc_update` stamp).
    - Process follow-ups (noticed but not fixed → new items via
      classification heuristics, set `spawned_from:`).

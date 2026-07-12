@@ -52,6 +52,17 @@ End of every coding task. Runs whether or not the task maps to a roadmap item. I
 
 Mechanical items from step 5 are NEVER persisted in `.pending-reconciliation.yaml` — they apply silently and disappear from the ledger. Only items in the four "judgment" buckets (intent_drift, boundary_decision, roadmap_drift, threshold) can be deferred.
 
+**`doc-flag` entries (opt-in post-commit hook).** If the post-commit hook is installed
+(`tenbo-dashboard hook install post-commit`), each commit appends `kind: doc-flag`
+entries to `.pending-reconciliation.yaml` for the layers its diff touched — a cheap,
+deterministic "these areas changed, docs may need a look" flag written with no LLM. When
+reconciling an affected layer, treat any open `doc-flag` entry for it as a prompt to
+refresh that layer's docs (structural half via `code-map generate`, prose as needed).
+**After the doc update lands for a layer, clear its flag:**
+`npx tenbo-dashboard reconcile clear --layer <scope:layer>` (or `--commit <sha>`). This is
+how "completion of the doc update clears the record" — otherwise the flag re-surfaces in
+the next session briefing (`pending_reconciliation` count).
+
 8. **Observations emitted?** Append to `.tenbo/observations.md` (running log, agent-appended). One bullet per observation, dated. The tenbo viewer will render this file once viewer support lands (Plan B).
 
 9. **Update file-hash cache.** Recompute SHA256 hashes for all files matched by

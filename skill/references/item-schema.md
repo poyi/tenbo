@@ -11,7 +11,16 @@ Optional fields items in `roadmap.yaml` may carry:
 - `related:` — peer item ids (not parent–child).
 - `phases:` — `[{ id, title, status, completed_at?, notes? }]` for multi-phase items. Item-level `status` is derived when `phases:` is present.
 - `affects:` — `[layer-id]` (same scope) or `[scope-id:layer-id]` (cross-scope).
-- `done_when:` — 1–3 plain-English bullets defining done.
+- `done_when:` — 1–3 bullets defining done. Each bullet is either a plain-English string,
+  or a **structured, machine-checkable** entry (x-003):
+  `{ text: "<criterion>", check: { run: "<shell command>", expect_exit: 0, timeout_ms: 60000 } }`.
+  When a criterion maps to a deterministic command (build/test/lint), prefer the structured
+  form so completion can be evidence-based. `expect_exit` defaults to 0; `timeout_ms` defaults
+  to 60000 and is hard-capped at 300000. `npx tenbo-dashboard item verify <id> --check` runs
+  the `check:` bullets (strict timeout, process-group kill) and records pass/fail evidence;
+  the completion bar treats a failing check as blocking. Plain-string bullets are reported as
+  `manual` — never auto-passed. Execution happens only on this explicit verify, never
+  automatically.
 - `files_to_read:` — repo-relative paths an implementer should read first.
 - `risks:` — known unknowns or complicating factors.
 - `priority:` — `p0` (critical) / `p1` (high) / `p2` (normal) / `p3` (low). Advisory only — does not affect ordering.

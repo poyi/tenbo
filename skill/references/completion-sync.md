@@ -37,6 +37,17 @@ summary. Judgment calls use the universal prompting rule.
    - Responsibilities/boundaries changed → edit `intent.md`.
    - Files added/removed/renamed or deps changed → update `code-map.md` mechanically.
    - Structural shift → append dated boundary-decision entry to `intent.md`.
+   - **Decision capture (sk-036), project-level only:** offer ONE line — "Record this as
+     a decision?" — only when the finished work made a durable cross-layer or
+     project-level architectural/boundary call (a real seam chosen, an alternative
+     declined for a reason future work would otherwise repeat). Skip condition, no offer:
+     routine or mechanical completions — bug fixes, mechanical edits, doc-only updates,
+     or any call that's actually layer-scoped (those stay in that layer's `intent.md`
+     `Boundary decisions:` list per the bullet above, not here). On accept, write
+     `.tenbo/decisions/<slug>.md` from `templates/decision.md.tmpl` — same location and
+     shape the audit path's Decisions filter reads, so the new record suppresses
+     re-litigation automatically. On decline or silence, drop it — do not re-ask for the
+     same completion.
    - Per layer in `affects:`: repeat steps 2–3 only.
    - **Stamp `doc_update`:** edited → ISO date. Internal-only → `skipped — <reason>`.
 4. **Validate.** Diff against prior snapshot; surface only new warnings.
@@ -122,7 +133,12 @@ Work from the structured report. **Branch on continuation flag first:**
   1. Verify subagent's bar claims (report's per-rule `passed`/`n/a`/`failed` statements).
      Cross-check `done_when` evidence; check matching workpad ACs.
   2. Narrative update if approach changed what the layer does.
-  3. Boundary decision entry if report shows structural shift.
+  3. Boundary decision entry if report shows structural shift. **Decision capture (sk-036),
+     project-level only:** if the report shows a durable cross-layer or project-level
+     architectural/boundary call (a real seam chosen, an alternative declined for a reason
+     future work would re-raise), offer ONE line — "Record this as a decision?" On accept,
+     write `.tenbo/decisions/<slug>.md` from `templates/decision.md.tmpl`. Skip for routine
+     or mechanical work and for layer-scoped calls (those stay in `intent.md`).
   4. `doc_update` stamp: subagent edited → verify + stamp date. Subagent declined with reason →
      cross-check files list; if claim holds, stamp `skipped — <reason>`. Report omits field →
      deliverable failure; re-dispatch or apply yourself before flipping to done.

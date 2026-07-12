@@ -2,15 +2,14 @@
 name: tenbo
 description: >
   Use when the user talks about what to build next, expresses pain about code
-  complexity or maintenance, mentions a future work idea, finishes a task,
-  asks about project health or priorities, wants to understand how the project
-  is organized, or says "set up tenbo" / "refresh tenbo". Also triggers on
+  complexity or maintenance, mentions a future-work idea, finishes or ships a
+  task, asks about project health, priorities, or how the project is organized,
+  or says "set up tenbo" / "refresh tenbo" / "update tenbo". Also triggers on
   proactive roadmap-shaped phrasing anywhere in conversation ("we should",
-  "remind me to", "this is getting messy", "worried about", etc.).
-  Additionally, invoke at the start of any coding conversation to check
-  project setup state — offer initialization if .tenbo/ is absent, or run
-  a silent session briefing if present. Skip for pure coding questions with
-  no product, planning, or organizational dimension.
+  "eventually", "remind me to", "this is getting messy", "worried about",
+  "this blocks", etc.), and at the start of any coding conversation in a repo.
+  Skip for pure coding questions with no product, planning, or organizational
+  dimension.
 ---
 
 # Tenbo
@@ -64,19 +63,18 @@ Just talk naturally:
 | A new idea, feature, task, wish, reminder, backlog item  | Work Intake and Planning → capture path       |
 | Code complexity, maintenance pain, "this feels messy"    | Health Review and Recommendations             |
 | Finishing or shipping a task                             | Completion and Sync                           |
-|| After coding (3+ files or new/deleted file, automatic)   | Micro-sync (proactive)                        |
+| After coding (3+ files or new/deleted file, automatic)   | Micro-sync (proactive)                        |
 | Project status, what an area does, recent changes        | Project Summary                               |
 | Scaling concerns, architectural risk                     | Health Review and Recommendations             |
 | "Set up Tenbo" / no .tenbo/ exists                       | Initialize Project Memory                     |
-|| Session start in a repo (automatic)                      | Session Gate → init offer or briefing         |
-|| "Refresh Tenbo" / structural drift scan                  | Health Review and Recommendations → structure |
+| Session start in a repo (automatic)                      | Session Gate → init offer or briefing         |
+| "Refresh Tenbo" / structural drift scan                  | Health Review and Recommendations → structure |
 | Planning or breaking down an existing roadmap item       | Work Intake and Planning → plan path          |
 | Filling in architecture docs for a layer                 | Populate and Plan → populate path             |
 | "Work on the next item" / "continue the roadmap"         | Populate and Plan → execute path              |
-| "Complete all next items", "run the roadmap", "batch      | Batch Execute                                 |
-|  execute", "work through everything", "knock out N items" |                                               |
-|| "Start over on X" / "this approach isn't working"        | Completion and Sync → rework path             |
-|| "Update tenbo" / "check for tenbo updates"                | Self-Update                                   |
+| "Complete all next items", "run the roadmap", "batch execute", "work through everything", "knock out N items" | Batch Execute |
+| "Start over on X" / "this approach isn't working"        | Completion and Sync → rework path             |
+| "Update tenbo" / "check for tenbo updates"               | Self-Update                                   |
 
 When a message spans multiple signals, handle the primary intent first and passively
 capture the secondary signal.
@@ -129,15 +127,25 @@ Run once at the start of any session. Branches on `.tenbo/` presence.
    cleanly. **Explicit-checkpoint trigger:** if the user says "checkpoint",
    "wrap up the session", or similar, regenerate `agent-context.md` immediately.
 2. Bump `tenbo_sessions` in `workspace.yaml`.
-3. **Session briefing.** Produce a 2–4 line briefing if anything noteworthy:
+3. **Session briefing.** Run `npx tenbo-dashboard context session --json` first — it
+   returns the briefing inputs deterministically (bounded, fail-open): `now` items with
+   days-active, stale `now`/`next` items (thresholds from `principles.md`), pending
+   reconciliation (`pending_reconciliation.count` plus a per-entry `entries[{layer,kind}]`
+   breakdown — name the flagged layers, e.g. "docs flagged for auth, storage", not just a
+   count) and validation deltas, workpad-resume candidates, recent observations,
+   and `doc_staleness` (layers whose generated code-map is stale vs recent code changes).
+   Phrase a 2–4 line briefing from the bundle; if `doc_staleness.stale_layers` is
+   non-empty, add one line — "Docs for N area(s) look stale vs recent code — refresh?" —
+   and on yes run `code-map generate`. If nothing noteworthy, stay silent (don't brief for
+   the sake of briefing). If the command is unavailable or fails, fall back to computing
+   these by hand:
    - Count and titles of `now` items, with days-active.
    - Stale `now` items (beyond `stale_now_days`, default 7).
    - Stale `next` items (beyond `stale_next_days`, default 30).
-   - Pending reconciliation count.
-   - New validation warnings since last session.
+   - Pending reconciliation count; new validation warnings since last session.
    - Recent observations from `observations.md` (last 7 days).
-   If nothing noteworthy: stay silent (don't brief for the sake of briefing).
-4. **Workpad resume.** If a workpad exists with unchecked plan items, add:
+4. **Workpad resume.** From the bundle's workpad-resume candidates (or a manual scan if
+   the command was unavailable): if a workpad has unchecked plan items, add
    "You were working on [title]. Pick up where you left off?"
 5. **Drift detection.** If `.tenbo/.file-hashes.json` exists, compare hashes
    against current files. Surface only if drift found: "Heads up: N files
@@ -346,8 +354,12 @@ item's `done_when` criteria are satisfied.*
 #### Populate architecture content
 
 1. Load `architecture.yaml`, layer `README.md`, and `files` globs.
-2. Read source under those globs (entry points first). Draft `intent.md` and `code-map.md`
-   locally — do NOT write yet.
+2. Read source under those globs (entry points first). Draft `intent.md` and the
+   hand-written half of `code-map.md` (the "why", read-this-first, gotchas) locally — do
+   NOT write yet. Do NOT hand-author the structural half (entry points, file table,
+   dependency edges): that is generated. Run `npx tenbo-dashboard code-map generate
+   --scope <id>` to populate each layer's auto region from the source index; author only
+   the prose outside the `<!-- tenbo:auto:code-map begin/end -->` markers.
 3. Walk the user through the draft section by section via the universal prompting rule.
    Write only after confirmation. Append dated boundary-decision entry if a boundary
    decision was made.
@@ -366,9 +378,12 @@ Glossary sources (only these): scope `architecture.yaml` descriptions + layer `R
 
 1. Read all `roadmap.yaml` files. Collect `now` items; ask which scope if multiple.
 2. Confirm: "Next up: [title] — [description]. Go?"
-3. Load layer constraints (see subroutine). If item has `workpad:`, load it and run resume
-   reconciliation (`references/workpad-protocol.md` → "Resume reconciliation"). Continue from
-   first unchecked Plan item.
+3. Run `npx tenbo-dashboard context item <id> --json` first — it returns the item's core
+   fields, layer constraints, a bounded read-plan, and workpad state in one deterministic
+   bundle. Use it in place of loading layer constraints by hand. If the command is
+   unavailable or fails, fall back to the layer-constraints subroutine. Either way, if the
+   item has a `workpad:`, run resume reconciliation (`references/workpad-protocol.md` →
+   "Resume reconciliation") and continue from the first unchecked Plan item.
 4. Execute. Update workpad Plan checkboxes and Notes as work progresses. Surface any
    principle/invariant violation.
 5. On completion, run Completion and Sync. Ask: "Continue to next, or stop?"
@@ -463,9 +478,20 @@ Full rules: `references/plain-english.md`.
 
 ## Branch Awareness
 
-Before any structural change, check current branch. If non-main: warn once —
-"You're on `<branch>`. Structural changes may conflict at merge. Status flips and
-notes are always safe. Continue?" Do not block — warn once.
+Project-management state is trunk-truth — a fact about the project, not about a
+branch. Route every PM mutation (status flips, notes, verification, completion)
+through the typed CLI, which auto-discovers a running dashboard **hub** and sends
+the write there so one process is the single writer for `.tenbo/`. When a hub is
+running, do not hand-edit or mutate a worktree's local `.tenbo/` copy — let the CLI
+route to the hub (it resolves the shared repo root across worktrees). If no hub is
+running, the CLI falls back to a direct file write, fail-open.
+
+Before any structural change (layer split/merge, new layer, architecture edits),
+check current branch. If non-main **and no hub is running**: warn once — "You're on
+`<branch>`. Structural changes may conflict at merge. Status flips and notes are
+always safe. Continue?" Do not block — warn once. With a hub running, PM mutations
+land on trunk-truth regardless of the caller's branch, so the warning is unneeded.
+Workpads remain per-item files owned by the agent actively executing that item.
 
 ---
 
@@ -487,86 +513,13 @@ Compact phrasing — always offer picks: "(a) different name, (b) update glossar
 
 *Maps to: "update tenbo", "check for tenbo updates", "is tenbo up to date?"*
 
-Tenbo has up to FOUR update surfaces: the Claude Code skill (`.claude/skills/tenbo/`),
-the Codex skill (`$CODEX_HOME/skills/tenbo` or `~/.codex/skills/tenbo`), the Cursor
-rule package (`.cursor/rules/tenbo*.mdc`), and the dashboard CLI (npm).
-Self-Update detects which surfaces exist locally, checks each against its remote, and
-keeps them in lockstep so a fresh-skill/rule + stale-dashboard combination cannot cause
-silent "command not found" failures inside init.
+> **Procedure body:** load `references/self-update.md`. Contains the four update
+> surfaces, VERSION file format, semver comparison, and the ordered dashboard-first
+> update steps.
 
-### VERSION file format
-
-Both `skill/VERSION` and `cursor/VERSION` are YAML with two fields. The same min_dashboard
-floor applies to both surfaces.
-```yaml
-# skill/VERSION
-skill: 0.3.0
-min_dashboard: 0.3.0
-```
-```yaml
-# cursor/VERSION
-rule: 0.3.0
-min_dashboard: 0.3.0
-```
-- `skill:` / `rule:` — the package's own semver.
-- `min_dashboard:` — the lowest dashboard CLI version this package is known to work with.
-  Bumped only when the package begins requiring a new CLI command or behavior.
-
-### Procedure
-
-1. **Detect installed surfaces.**
-   - Claude Code skill installed if `.claude/skills/tenbo/` exists.
-   - Codex skill installed if `$CODEX_HOME/skills/tenbo/` exists, or if `CODEX_HOME`
-     is unset and `~/.codex/skills/tenbo/` exists. Record the detected path as
-     `CODEX_SKILL_PATH`.
-   - Cursor rule installed if `.cursor/rules/tenbo.mdc` exists (or any `tenbo*.mdc` in that dir).
-   - Dashboard installed if `npx --no-install tenbo-dashboard --version` returns cleanly.
-2. **Read local versions** for each detected surface.
-   - Claude Code skill: parse `.claude/skills/tenbo/VERSION`.
-   - Codex skill: parse the detected Codex skill path's `VERSION`.
-   - Cursor: parse `.cursor/rules/tenbo-VERSION` (named with the `tenbo-` prefix to avoid
-     collision with other rule packages installed in the same `.cursor/rules/` directory).
-   - Dashboard: `npx --no-install tenbo-dashboard --version`.
-3. **Fetch remote versions.**
-   - Skill packages: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/skill/VERSION`.
-   - Cursor: `curl -sL --max-time 5 https://raw.githubusercontent.com/poyi/tenbo/main/cursor/VERSION`.
-   - Dashboard: `npm view tenbo-dashboard version --json` (5s timeout). On network failure
-     for any surface: report and continue with the surfaces that succeeded.
-   - Tolerate legacy single-line VERSION files (treat whole file as `skill:`/`rule:` and
-     assume `min_dashboard: 0.0.0`).
-4. **Compare with semver, not string equality.** Use the standard precedence (0.3.0 > 0.2.5).
-5. **Compute the action.**
-   - Each detected surface behind its remote → propose update for that surface.
-   - Any package's remote `min_dashboard` > installed dashboard → REQUIRE dashboard update
-     first (or refuse the package update with: "Updating the [skill/rule] to v[new] requires
-     dashboard ≥ v[min]. You have v[have]. Update dashboard first?").
-   - Dashboard not installed at all → flag in the report; do not block other updates.
-   - All up to date → "tenbo is up to date (skill v[s], rule v[r], dashboard v[d])." Stop.
-6. **Confirm with the user.** One message listing what will change:
-   *"Updates available: skill v[old] → v[new], rule v[old] → v[new], dashboard v[old] → v[new]. Apply?"*
-7. **On confirmation, run updates in this order:**
-   a. **Dashboard first** (if needed). Detect install scope:
-      - Global: `npm install -g tenbo-dashboard@latest`. On EACCES, suggest `sudo` or
-        the local-install fallback; do not auto-elevate.
-      - Local-to-project: `npm install tenbo-dashboard@latest --prefix <project>` if a
-        local install is detected.
-      - If `npm` itself is missing: report and stop.
-   b. **Skill / rule second** (if needed). For each surface that needs updating:
-      ```
-      git clone --depth 1 https://github.com/poyi/tenbo.git /tmp/tenbo-update
-      # Claude Code skill, if installed:
-      cp -r /tmp/tenbo-update/skill/. .claude/skills/tenbo/
-      # Codex skill, if installed:
-      cp -r /tmp/tenbo-update/skill/. "$CODEX_SKILL_PATH/"
-      # Cursor rule, if installed:
-      cp -r /tmp/tenbo-update/cursor/. .cursor/rules/    # flat copy of all .mdc + templates
-      rm -rf /tmp/tenbo-update
-      ```
-8. **Verify.** Re-read all updated versions. Report: *"Updated: skill v[new], rule v[new], dashboard v[new]."*
-   If a step failed, report which one and what to do.
-
-The update only replaces skill / rule package files and the `tenbo-dashboard` package binary.
-It never touches the project's `.tenbo/` directory — all project data is safe.
+Tenbo has up to four update surfaces — the Claude Code skill, the Codex skill, the
+Cursor rule package, and the dashboard CLI — kept in lockstep so a stale surface can't
+cause silent "command not found" failures inside init.
 
 ---
 
@@ -583,6 +536,12 @@ Prefer typed CLI commands for common roadmap reads and mutations instead of
 hand-editing roadmap YAML. The package exposes the historical `tenbo-dashboard`
 binary and an installed `tenbo` alias; use `npx tenbo-dashboard ...` for one-shot
 package execution.
+
+Mutating commands (`set-status`, `add-note`, `verify`, `doc-update`, `complete`,
+`link-commit`) auto-route to a running hub — the single writer — so concurrent
+agents never conflict on `.tenbo/`; with no hub they write files directly, fail-open.
+Set `TENBO_AGENT=<name>` (or pass `--agent <name>`) so each mutation is attributed;
+`item history <id>` answers who changed an item and when.
 
 ```bash
 npx tenbo-dashboard item show <id> --json
@@ -602,8 +561,18 @@ npx tenbo-dashboard next --agent-summary --json
 npx tenbo-dashboard work-queue --type refactor --status now,next,later --json
 npx tenbo-dashboard index --if-stale --json
 npx tenbo-dashboard context feature --query "<user request>" --json
+npx tenbo-dashboard context session --json
+npx tenbo-dashboard context item <id> --json
 npx tenbo-dashboard commit-ready --json
+npx tenbo-dashboard commit-context --json
+npx tenbo-dashboard item history <id> --json
 ```
+
+When wrapping up a change, run `commit-context` to see which roadmap item(s) the
+pending diff advances and a draft commit message referencing them — then
+`item link-commit <id> <sha>` after committing. An opt-in `prepare-commit-msg` hook
+(`hook install prepare-commit-msg`) can surface the same suggestion automatically;
+it is advisory, fail-open, and never blocks the commit.
 
 Use `item show` for full detail, `items --summary` / `--fields` for compact
 agent triage, `item brief` before starting a specific item, `item handoff` when

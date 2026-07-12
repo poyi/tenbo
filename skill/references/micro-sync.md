@@ -28,13 +28,18 @@ Below this threshold, skip silently — single-file typo fixes don't need reconc
 1. **Map changed files → layers.** Pattern-match against `architecture.yaml` globs.
    No layers affected → exit silently.
 
-2. **Mechanical code-map update.** For each affected layer:
-   - New file in glob but not in `code-map.md` → add row.
-   - File renamed/deleted → update or remove row.
-   - New external import → add to `architecture.yaml` `dependencies.external`.
-   - New cross-layer import → add to `architecture.yaml` `dependencies.outbound`.
-   - Run AST pattern extraction (`references/ast-patterns.md`) for changed files
-     to detect new/removed exports. Update `code-map.md` entries mechanically.
+2. **Mechanical code-map update.** For each affected layer, prefer the deterministic
+   generator over hand-editing:
+   - Run `npx tenbo-dashboard code-map generate --scope <id> --json` — it refreshes the
+     index and rewrites the auto-generated structural region (entry points, file table,
+     dependency edges) of each layer's `code-map.md` from the source index, touching only
+     the text between the `<!-- tenbo:auto:code-map begin/end -->` markers. Hand-written
+     prose outside the markers is preserved byte-for-byte. Report `changed` layers in the
+     one-liner.
+   - Also reflect dependency shifts in `architecture.yaml`: new external import →
+     `dependencies.external`; new cross-layer import → `dependencies.outbound`.
+   - Fallback only if the command is unavailable: add/remove `code-map.md` rows by hand and
+     run AST pattern extraction (`references/ast-patterns.md`) for changed files.
 
 3. **Quick validate + one-liner.** Run validation (in-memory, not CLI). If new
    warnings appear, surface one line. Otherwise:
