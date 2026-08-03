@@ -74,6 +74,7 @@ export function getPlanningDocument(repoRoot: string, documentId: string): Plann
   return {
     id: documentId,
     item_id: itemIdFromContentOrName(content, documentId),
+    source_kind: 'planning',
     kind: meta.kind,
     path: documentId,
     content,

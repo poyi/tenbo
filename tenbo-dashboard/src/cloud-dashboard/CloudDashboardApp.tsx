@@ -4,7 +4,7 @@ import type {
   ItemFiltersDto,
   ItemRecordDto,
   MutationHistoryEntryDto,
-  PlanningDocumentDto,
+  DocumentSearchResultDto,
   ProjectRoleDto,
   ProjectSummaryDto,
   TenboDocumentDto,
@@ -216,10 +216,9 @@ function ItemCard({ record, onOpen }: { record: ItemRecordDto; onOpen(item: Item
 function DocumentsSurface({ project, client }: { project: ProjectSummaryDto; client: CloudDashboardClient }) {
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
-  const [documents, setDocuments] = useState<TenboDocumentDto[]>([]);
+  const [documents, setDocuments] = useState<DocumentSearchResultDto[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selected, setSelected] = useState<TenboDocumentDto | null>(null);
-  const [editContent, setEditContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -235,10 +234,15 @@ function DocumentsSurface({ project, client }: { project: ProjectSummaryDto; cli
   };
 
   const submit = async (value: string) => { setQuery(value); if (!value) { setDocuments([]); return; } setBusy(true); setError(null); try { const result = await client.searchDocuments(project.id, value, undefined); setDocuments(result.documents); setNextCursor(result.page.next_cursor); } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); } };
-  const isGit = selected && 'source_kind' in selected && selected.source_kind === 'git';
-  const planning = selected && !isGit ? selected as PlanningDocumentDto : null;
+  const openDocument = async (document: DocumentSearchResultDto) => {
+    setBusy(true); setError(null);
+    try { setSelected(await client.getDocument(project.id, document.id)); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  };
+  const isGit = selected?.source_kind === 'git';
 
-  return <main className={styles.readSurface}><section className={styles.readHeader}><div><div className={styles.eyebrow}>Bounded canonical reads</div><h1>Documents</h1><p>Git documentation remains Git-owned. Specs, workpads, and handoffs are cloud planning documents.</p></div><form role="search" onSubmit={(event) => { event.preventDefault(); void submit(draft.trim()); }}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search paths and contents" aria-label="Search documents" /><button className={styles.primaryButton}>Search</button></form></section>{error && <div className={`${styles.stateBanner} ${styles.dangerBanner}`} role="alert">{error}</div>}{!query && <HostedState title="Search project documents" detail="Results are paginated and content is loaded only for the matching page." />}{query && !busy && documents.length === 0 && <HostedState title="No documents match" detail={`No Git or cloud planning documents matched “${query}”.`} />}{documents.length > 0 && <div className={styles.documentLayout}><ol className={styles.documentList}>{documents.map((document) => { const git = 'source_kind' in document && document.source_kind === 'git'; return <li key={document.id}><button aria-pressed={selected?.id === document.id} onClick={() => { setSelected(document); setEditContent(document.content); }}><strong>{document.path}</strong><span>{git ? 'Git-owned · read-only' : `Cloud planning · ${document.kind}`}</span></button></li>; })}{nextCursor && <li><button className={styles.secondaryButton} disabled={busy} onClick={() => void runSearch(nextCursor)}>Load next page</button></li>}</ol>{selected && <article className={styles.documentViewer}><div className={styles.documentMeta}><strong>{selected.path}</strong><span>{isGit ? `Git · ${(selected as Extract<TenboDocumentDto, { source_kind: 'git' }>).commit_sha.slice(0, 12)}` : `Cloud planning · version ${selected.version}`}</span></div>{planning && project.role !== 'viewer' ? <><textarea value={editContent} onChange={(event) => setEditContent(event.target.value)} aria-label="Planning document content" /><button className={styles.primaryButton} disabled={busy || editContent === planning.content} onClick={async () => { setBusy(true); setError(null); try { const result = await client.command(project.id, { kind: 'updatePlanningDocument', document_id: planning.id, content: editContent, expected_version: planning.version }); if (result.kind === 'document') { setSelected(result.value); setDocuments((current) => current.map((document) => document.id === result.value.id ? result.value : document)); } } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); } }}>Save planning document</button></> : <pre>{selected.content}</pre>}</article>}</div>}{busy && <div className={styles.stateBanner} role="status">Loading bounded document page…</div>}</main>;
+  return <main className={styles.readSurface}><section className={styles.readHeader}><div><div className={styles.eyebrow}>Bounded canonical reads</div><h1>Documents</h1><p>Git documentation remains Git-owned. Specs, workpads, and handoffs are cloud planning documents.</p></div><form role="search" onSubmit={(event) => { event.preventDefault(); void submit(draft.trim()); }}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search paths and contents" aria-label="Search documents" /><button className={styles.primaryButton}>Search</button></form></section>{error && <div className={`${styles.stateBanner} ${styles.dangerBanner}`} role="alert">{error}</div>}{!query && <HostedState title="Search project documents" detail="Results are paginated and content loads only when you select a result." />}{query && !busy && documents.length === 0 && <HostedState title="No documents match" detail={`No Git or cloud planning documents matched “${query}”.`} />}{documents.length > 0 && <div className={styles.documentLayout}><ol className={styles.documentList}>{documents.map((document) => <li key={document.id}><button aria-pressed={selected?.id === document.id} onClick={() => void openDocument(document)}><strong>{document.path}</strong><span>{document.source_kind === 'git' ? 'Git-owned · read-only' : `Cloud planning · ${document.kind} · v${document.version}`}</span><small>{document.excerpt}</small></button></li>)}{nextCursor && <li><button className={styles.secondaryButton} disabled={busy} onClick={() => void runSearch(nextCursor)}>Load next page</button></li>}</ol>{selected && <article className={styles.documentViewer}><div className={styles.documentMeta}><strong>{selected.path}</strong><span>{isGit ? `Git · ${(selected as Extract<TenboDocumentDto, { source_kind: 'git' }>).commit_sha.slice(0, 12)}` : `Cloud planning · version ${selected.version}`}</span></div><pre>{selected.content}</pre>{selected.source_kind === 'planning' && project.role !== 'viewer' && <p className={styles.specHint}>Edit planning documents from their roadmap item, where the claim fence and section history stay visible.</p>}</article>}</div>}{busy && <div className={styles.stateBanner} role="status">Loading bounded document page…</div>}</main>;
 }
 
 function HistorySurface({ project, client }: { project: ProjectSummaryDto; client: CloudDashboardClient }) {

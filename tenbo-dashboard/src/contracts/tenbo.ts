@@ -15,7 +15,7 @@ import type {
  */
 export const TENBO_SCHEMA_VERSION = 1 as const;
 /** Package/protocol release sent to the gateway for project minimum-version enforcement. */
-export const TENBO_CLIENT_VERSION = '0.14.0' as const;
+export const TENBO_CLIENT_VERSION = '0.15.0' as const;
 /** Epoch increments only when a project requires a non-backward-compatible backend contract. */
 export const TENBO_BACKEND_EPOCH = 1 as const;
 export const DEFAULT_PAGE_SIZE = 50;
@@ -46,6 +46,13 @@ export interface ItemRecordDto {
   /** Opaque optimistic-concurrency version. */
   version: string;
   archived: boolean;
+  /** Canonical prerequisite projection; cloud storage remains relation-table-owned. */
+  depends_on?: string[];
+  unresolved_blockers?: Array<{ item_id: string; status: Status | 'missing' }>;
+  readiness?: 'ready' | 'blocked';
+  specification?: PlanningDocumentMetadataDto;
+  /** Every specification attached to the item, including archived history. */
+  specifications?: PlanningDocumentMetadataDto[];
 }
 
 export interface ItemPageDto {
@@ -94,9 +101,71 @@ export type ItemRichPatchDto = Partial<Pick<Item,
 
 export type PlanningDocumentKind = 'spec' | 'workpad' | 'handoff';
 
+export interface PlanningDocumentMetadataDto {
+  id: string;
+  item_id: string;
+  source_kind: 'planning';
+  kind: PlanningDocumentKind;
+  path: string;
+  version: string;
+  archived: boolean;
+  content_hash: string;
+  summary: string;
+  token_estimate: number;
+  content_bytes: number;
+}
+
+export interface DocumentSearchResultDto {
+  id: string;
+  item_id?: string;
+  source_kind: 'planning' | 'git';
+  kind: string;
+  path: string;
+  version: string;
+  archived: boolean;
+  content_hash: string;
+  summary: string;
+  excerpt: string;
+  token_estimate: number;
+  content_bytes: number;
+}
+
+export interface DocumentVersionDto {
+  document_id: string;
+  version: string;
+  content_hash: string;
+  summary: string;
+  token_estimate: number;
+  content_bytes: number;
+  authored_by_type: ActorDto['type'];
+  authored_by_id: string;
+  created_at: string;
+}
+
+export type DocumentPromotionStatus = 'pending' | 'merged' | 'finalized' | 'abandoned' | 'rejected';
+
+export interface DocumentPromotionAttemptDto {
+  id: string;
+  item_id: string;
+  source_document_id: string;
+  source_version: string;
+  source_content_hash: string;
+  target_repository: string;
+  target_path: string;
+  status: DocumentPromotionStatus;
+  merged_commit_sha?: string;
+  git_document_id?: string;
+  created_by_type: ActorDto['type'];
+  created_by_id: string;
+  version: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PlanningDocumentDto {
   id: string;
   item_id: string;
+  source_kind: 'planning';
   kind: PlanningDocumentKind;
   path: string;
   content: string;
@@ -196,8 +265,17 @@ export type TenboQuery =
   | { kind: 'getWorkQueue'; filters?: ItemFiltersDto; page?: PageRequestDto }
   | { kind: 'getSessionContext' }
   | { kind: 'searchContext'; query: string }
-  | { kind: 'getItemContext'; item_id: string }
+  | {
+      kind: 'getItemContext';
+      item_id: string;
+      document_mode?: 'summary' | 'section' | 'full';
+      section?: string;
+      continuation_cursor?: string;
+    }
   | { kind: 'getDocument'; document_id: string }
+  | { kind: 'getDocumentVersions'; document_id: string; page?: PageRequestDto }
+  | { kind: 'compareDocumentVersions'; document_id: string; from_version: string; to_version: string }
+  | { kind: 'listDocumentPromotions'; item_id?: string; document_id?: string; attempt_id?: string; page?: PageRequestDto }
   | { kind: 'searchDocuments'; query: string; kind_filter?: PlanningDocumentKind; page?: PageRequestDto }
   | { kind: 'getMutationHistory'; item_id?: string; page?: PageRequestDto }
   | { kind: 'exportProject' };
@@ -227,7 +305,10 @@ export type TenboQueryResult =
   | { kind: 'activeClaimPage'; value: ActiveClaimPageDto }
   | ContextResultDto
   | { kind: 'document'; value: TenboDocumentDto }
-  | { kind: 'documentPage'; value: TenboDocumentDto[]; page: PageMetaDto }
+  | { kind: 'documentPage'; value: Array<TenboDocumentDto | DocumentSearchResultDto>; page: PageMetaDto }
+  | { kind: 'documentVersionPage'; value: DocumentVersionDto[]; page: PageMetaDto }
+  | { kind: 'documentDiff'; value: JsonValue }
+  | { kind: 'promotionPage'; value: DocumentPromotionAttemptDto[]; page: PageMetaDto }
   | { kind: 'mutationHistory'; value: MutationHistoryEntryDto[]; page: PageMetaDto }
   | { kind: 'projectExport'; value: JsonValue };
 
@@ -263,20 +344,80 @@ export type TenboCommand =
   | { kind: 'renewClaim'; item_id: string; owner: string; fencing_token: number; lease_seconds?: number }
   | { kind: 'releaseClaim'; item_id: string; owner: string; fencing_token: number }
   | {
+      kind: 'addDependency';
+      item_id: string;
+      prerequisite_id: string;
+      expected_version?: string;
+      fencing_token?: number;
+    }
+  | {
+      kind: 'removeDependency';
+      item_id: string;
+      prerequisite_id: string;
+      expected_version?: string;
+      fencing_token?: number;
+    }
+  | {
       kind: 'createPlanningDocument';
       item_id: string;
       document_kind: PlanningDocumentKind;
       slug?: string;
       content: string;
+      fencing_token?: number;
     }
   | {
       kind: 'updatePlanningDocument';
       document_id: string;
       content: string;
-      expected_version?: string;
+      expected_version: string;
+      fencing_token?: number;
     }
-  | { kind: 'archivePlanningDocument'; document_id: string; expected_version?: string }
-  | { kind: 'restorePlanningDocument'; document_id: string; expected_version?: string }
+  | {
+      kind: 'replacePlanningDocumentSection';
+      document_id: string;
+      heading: string;
+      content: string;
+      expected_version: string;
+      expected_section_hash: string;
+      fencing_token?: number;
+    }
+  | {
+      kind: 'appendPlanningDocumentSection';
+      document_id: string;
+      heading: string;
+      content: string;
+      expected_version: string;
+      fencing_token?: number;
+    }
+  | {
+      kind: 'restorePlanningDocumentVersion';
+      document_id: string;
+      version: string;
+      expected_version: string;
+      fencing_token?: number;
+    }
+  | { kind: 'archivePlanningDocument'; document_id: string; expected_version: string; fencing_token?: number }
+  | { kind: 'restorePlanningDocument'; document_id: string; expected_version: string; fencing_token?: number }
+  | {
+      kind: 'beginDocumentPromotion';
+      document_id: string;
+      expected_version: string;
+      source_content_hash: string;
+      target_repository: string;
+      target_path: string;
+      fencing_token: number;
+    }
+  | { kind: 'abandonDocumentPromotion'; attempt_id: string; expected_version: string; fencing_token: number }
+  | {
+      /** Trusted CI/admin command. Content must come from the exact commit target path. */
+      kind: 'finalizeDocumentPromotion';
+      attempt_id: string;
+      repository: string;
+      commit_sha: string;
+      path: string;
+      content_hash: string;
+      content: string;
+    }
   | {
       /** Trusted CI/admin command. Callers must derive content from the exact commit, never arbitrary CLI bytes. */
       kind: 'ingestGitDocument';
@@ -321,12 +462,14 @@ export interface CommandEnvelopeDto<C extends TenboCommand = TenboCommand> {
 
 export type TenboCommandResult =
   | { kind: 'allocation'; item_id: string }
-  | { kind: 'item'; value: ItemRecordDto; validation?: ValidateResult }
+  | { kind: 'item'; value: ItemRecordDto; validation?: ValidateResult; newly_unblocked?: string[] }
   | { kind: 'reorder'; scope_id: string; item_ids: string[]; list_version: string }
   | { kind: 'claim'; value: ItemClaimDto }
   | { kind: 'claimReleased'; item_id: string; fencing_token: number }
   | { kind: 'document'; value: PlanningDocumentDto }
   | { kind: 'gitDocument'; value: GitDocumentDto }
+  | { kind: 'promotion'; value: DocumentPromotionAttemptDto; git_document?: GitDocumentDto }
+  | { kind: 'promotionRejected'; value: DocumentPromotionAttemptDto; reason: string }
   | { kind: 'import'; imported_items: number; imported_documents: number; imported_mutations?: number; imported_claims?: number; project_version?: string }
   | {
       kind: 'stagedImportSession';
@@ -364,7 +507,9 @@ export interface ItemCommandPort {
       | 'setVerification'
       | 'setDocUpdate'
       | 'linkCommit'
-      | 'completeItem';
+      | 'completeItem'
+      | 'addDependency'
+      | 'removeDependency';
   }>, actor: ActorDto): Promise<TenboCommandResult>;
 }
 
@@ -380,9 +525,14 @@ export interface CoordinationPort {
 
 export interface PlanningDocumentPort {
   get(documentId: string): Promise<TenboDocumentDto>;
-  search(query: string, kind: PlanningDocumentKind | undefined, page?: PageRequestDto): Promise<{ documents: TenboDocumentDto[]; page: PageMetaDto }>;
+  search(query: string, kind: PlanningDocumentKind | undefined, page?: PageRequestDto): Promise<{
+    documents: Array<TenboDocumentDto | DocumentSearchResultDto>;
+    page: PageMetaDto;
+  }>;
   execute(command: Extract<TenboCommand, {
-    kind: 'createPlanningDocument' | 'updatePlanningDocument' | 'archivePlanningDocument' | 'restorePlanningDocument';
+    kind: 'createPlanningDocument' | 'updatePlanningDocument' | 'replacePlanningDocumentSection'
+      | 'appendPlanningDocumentSection' | 'restorePlanningDocumentVersion'
+      | 'archivePlanningDocument' | 'restorePlanningDocument';
   }>, actor: ActorDto): Promise<TenboCommandResult>;
 }
 

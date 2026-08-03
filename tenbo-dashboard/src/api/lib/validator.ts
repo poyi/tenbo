@@ -12,7 +12,8 @@ const FORBIDDEN_JARGON = [
 const VALID_STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
 const VALID_PRIORITIES = new Set(['p0', 'p1', 'p2', 'p3']);
 const VALID_VERIFICATION_STATUSES = new Set(['not_required', 'pending_live', 'verified', 'failed']);
-const ITEM_ID_RE = /^[a-z]{1,5}-\d{3,}$/;
+/** Historical ids with one or two digits remain valid read/relationship targets. */
+const ITEM_ID_RE = /^[a-z][a-z0-9-]*-\d+(?:\.[a-z0-9]+)*$/i;
 const DOC_UPDATE_REQUIRED_TYPES = new Set(['feature', 'refactor', 'bug']);
 const DOC_UPDATE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DOC_UPDATE_SKIPPED_RE = /^skipped\s*[—:-]\s*\S/;
@@ -128,6 +129,30 @@ export function validate(state: TenboState, options: ValidateOptions = {}): Vali
           }
           if (!allItemIds.has(ref)) {
             warnings.push({ level: 'warning', message: `${item.id} related references unknown id '${ref}'`, scope: scopeId, itemId: item.id });
+          }
+        }
+      }
+    }
+    if (item.depends_on !== undefined) {
+      if (!Array.isArray(item.depends_on)) {
+        errors.push({ level: 'error', message: `item "${item.id}" depends_on must be a list`, scope: scopeId, itemId: item.id });
+      } else {
+        const seen = new Set<string>();
+        for (const ref of item.depends_on) {
+          if (typeof ref !== 'string' || !ITEM_ID_RE.test(ref)) {
+            errors.push({ level: 'error', message: `item "${item.id}" depends_on entry "${ref}" has invalid id format`, scope: scopeId, itemId: item.id });
+            continue;
+          }
+          if (ref === item.id) {
+            errors.push({ level: 'error', message: `item "${item.id}" depends_on cannot reference itself`, scope: scopeId, itemId: item.id });
+            continue;
+          }
+          if (seen.has(ref)) {
+            warnings.push({ level: 'warning', message: `item "${item.id}" depends_on has duplicate id '${ref}'`, scope: scopeId, itemId: item.id });
+          }
+          seen.add(ref);
+          if (!allItemIds.has(ref)) {
+            errors.push({ level: 'error', message: `${item.id} depends_on references unknown id '${ref}'`, scope: scopeId, itemId: item.id });
           }
         }
       }
@@ -587,6 +612,40 @@ export function validate(state: TenboState, options: ValidateOptions = {}): Vali
     validateSupersededBy(item);
     validateSpecLinks(item);
   }
+
+  // Executable prerequisites form one workspace-wide DAG. Relationship-shape
+  // errors above remain precise; this pass only reports actual directed cycles.
+  const dependencyItems = [
+    ...state.scopes.flatMap((scope) => [...scope.items, ...(scope.archivedItems ?? [])]),
+    ...(state.crossCuttingRoadmap ?? []),
+  ];
+  const dependencyById = new Map(dependencyItems.map((item) => [item.id, item]));
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const stack: string[] = [];
+  const reportedCycles = new Set<string>();
+  const visitDependency = (itemId: string) => {
+    if (visited.has(itemId)) return;
+    if (visiting.has(itemId)) {
+      const start = stack.indexOf(itemId);
+      const cycle = [...stack.slice(start), itemId];
+      const key = [...new Set(cycle)].sort().join('|');
+      if (!reportedCycles.has(key)) {
+        reportedCycles.add(key);
+        errors.push({ level: 'error', message: `depends_on cycle: ${cycle.join(' -> ')}`, itemId });
+      }
+      return;
+    }
+    visiting.add(itemId);
+    stack.push(itemId);
+    for (const prerequisite of dependencyById.get(itemId)?.depends_on ?? []) {
+      if (dependencyById.has(prerequisite)) visitDependency(prerequisite);
+    }
+    stack.pop();
+    visiting.delete(itemId);
+    visited.add(itemId);
+  };
+  for (const item of dependencyItems) visitDependency(item.id);
 
   return { errors, warnings };
 }

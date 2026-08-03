@@ -26,6 +26,19 @@ function readState(repoRoot: string): ClaimState {
   }
 }
 
+export function getActiveLocalClaim(repoRoot: string, itemId: string, now = new Date()): ItemClaimDto | null {
+  const claim = readState(repoRoot).claims[itemId];
+  return claim && new Date(claim.expires_at).getTime() > now.getTime() ? claim : null;
+}
+
+export function assertLocalClaimFence(repoRoot: string, itemId: string, fencingToken: number | undefined): void {
+  const claim = getActiveLocalClaim(repoRoot, itemId);
+  if (!claim) return;
+  if (fencingToken !== claim.fencing_token) {
+    throw new TenboContractError('conflict', `active claim for ${itemId} requires fencing token ${claim.fencing_token}`);
+  }
+}
+
 function writeState(repoRoot: string, state: ClaimState): void {
   writeGeneratedCacheFile(repoRoot, CLAIM_PATH, `${JSON.stringify(state, null, 2)}\n`);
 }

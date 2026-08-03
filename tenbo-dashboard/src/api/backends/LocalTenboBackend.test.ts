@@ -110,27 +110,33 @@ describe('LocalTenboBackend typed command coverage', () => {
       kind: 'renewClaim', item_id: 'ed-100', owner: 'test-agent', fencing_token: claim.value.fencing_token, lease_seconds: 120,
     }));
     expect(renewed.kind === 'claim' && renewed.value.version).toBe(2);
-    await backend.command(envelope({
-      kind: 'releaseClaim', item_id: 'ed-100', owner: 'test-agent', fencing_token: claim.value.fencing_token,
-    }));
-
     const workpad = await backend.command(envelope({
       kind: 'createPlanningDocument', item_id: 'ed-100', document_kind: 'workpad', content: '# Workpad\n\n## Plan\n\n- [ ] finish\n',
+      fencing_token: claim.value.fencing_token,
     }));
     expect(workpad.kind === 'document' && workpad.value.path).toBe('.tenbo/workpads/ed-100.md');
     if (workpad.kind !== 'document') throw new Error('document result expected');
     const revised = await backend.command(envelope({
       kind: 'updatePlanningDocument', document_id: workpad.value.id, content: '# Workpad\n\n## Plan\n\n- [x] finish\n', expected_version: workpad.value.version,
+      fencing_token: claim.value.fencing_token,
     }));
     expect(revised.kind).toBe('document');
     if (revised.kind !== 'document') throw new Error('document result expected');
     const archivedDocument = await backend.command(envelope({
       kind: 'archivePlanningDocument', document_id: revised.value.id, expected_version: revised.value.version,
+      fencing_token: claim.value.fencing_token,
     }));
     expect(archivedDocument.kind === 'document' && archivedDocument.value.archived).toBe(true);
     if (archivedDocument.kind !== 'document') throw new Error('document result expected');
-    const restoredDocument = await backend.command(envelope({ kind: 'restorePlanningDocument', document_id: archivedDocument.value.id }));
+    const restoredDocument = await backend.command(envelope({
+      kind: 'restorePlanningDocument', document_id: archivedDocument.value.id,
+      expected_version: archivedDocument.value.version, fencing_token: claim.value.fencing_token,
+    }));
     expect(restoredDocument.kind === 'document' && restoredDocument.value.archived).toBe(false);
+
+    await backend.command(envelope({
+      kind: 'releaseClaim', item_id: 'ed-100', owner: 'test-agent', fencing_token: claim.value.fencing_token,
+    }));
 
     const completed = await backend.command(envelope({
       kind: 'completeItem', item_id: 'ed-100', evidence: ['npm test -- --run'], doc_update: '2026-08-02', verification_status: 'verified',
@@ -156,5 +162,52 @@ describe('LocalTenboBackend typed command coverage', () => {
       .rejects.toThrow(/changed since it was read/);
     await expect(backend.command(envelope({ kind: 'setStatus', item_id: 'ed-002', status: 'now' }, 'versioned')))
       .rejects.toThrow(/reused with a different request/);
+  });
+
+  it('projects executable dependencies, filters blocked work, and reports newly unblocked items', async () => {
+    const backend = new LocalTenboBackend(repoRoot);
+    const dependency = await backend.command(envelope({
+      kind: 'addDependency', item_id: 'ed-001', prerequisite_id: 'ed-002',
+    }));
+    expect(dependency.kind === 'item' && dependency.value).toMatchObject({
+      depends_on: ['ed-002'],
+      readiness: 'blocked',
+      unresolved_blockers: [{ item_id: 'ed-002', status: 'later' }],
+    });
+    const queueWhileBlocked = await backend.query({ schema_version: TENBO_SCHEMA_VERSION, query: { kind: 'getWorkQueue' } });
+    expect(queueWhileBlocked.kind === 'itemPage' && queueWhileBlocked.value.items.map((entry) => entry.item.id)).not.toContain('ed-001');
+    await expect(backend.command(envelope({ kind: 'claimItem', item_id: 'ed-001', owner: 'test-agent' })))
+      .rejects.toThrow(/blocked by ed-002/);
+
+    const completed = await backend.command(envelope({
+      kind: 'completeItem', item_id: 'ed-002', evidence: ['dependency test'], verification_status: 'verified',
+    }));
+    expect(completed.kind === 'item' && completed.newly_unblocked).toEqual(['ed-001']);
+    const ready = await backend.query({ schema_version: TENBO_SCHEMA_VERSION, query: { kind: 'getItem', item_id: 'ed-001' } });
+    expect(ready.kind === 'item' && ready.value.readiness).toBe('ready');
+  });
+
+  it('rejects dependency cycles and requires the active claim fence for active work', async () => {
+    const backend = new LocalTenboBackend(repoRoot);
+    await backend.command(envelope({ kind: 'addDependency', item_id: 'ed-001', prerequisite_id: 'ed-002' }));
+    await expect(backend.command(envelope({ kind: 'addDependency', item_id: 'ed-002', prerequisite_id: 'ed-001' })))
+      .rejects.toThrow(/would create a cycle/);
+
+    await backend.command(envelope({ kind: 'setStatus', item_id: 'ed-002', status: 'now' }));
+    await expect(backend.command(envelope({ kind: 'addDependency', item_id: 'ed-002', prerequisite_id: 'ed-099' })))
+      .rejects.toThrow(/requires a claim/);
+    const claim = await backend.command(envelope({ kind: 'claimItem', item_id: 'ed-002', owner: 'test-agent' }));
+    if (claim.kind !== 'claim') throw new Error('claim expected');
+    await expect(backend.command(envelope({
+      kind: 'addDependency', item_id: 'ed-002', prerequisite_id: 'ed-099', fencing_token: claim.value.fencing_token + 1,
+    }))).rejects.toThrow(/requires fencing token/);
+  });
+
+  it('requires padded ids for newly created items', async () => {
+    const backend = new LocalTenboBackend(repoRoot);
+    await expect(backend.command(envelope({
+      kind: 'createItem', scope_id: 'editor',
+      item: { id: 'ed-3', title: 'Short', description: 'A new short id.', status: 'later', layer: 'app' },
+    }))).rejects.toThrow(/at least three digits/);
   });
 });

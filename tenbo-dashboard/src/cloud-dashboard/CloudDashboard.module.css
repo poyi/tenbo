@@ -220,6 +220,125 @@
 .dialogHeader h2 { margin-top: 4px; font-size: 18px; }
 .claimRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 20px; color: var(--console-fog); border-bottom: 1px solid var(--console-mist); }
 .claimRow > strong { color: var(--console-snow); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.specWorkspace { border-bottom: 1px solid var(--console-mist); }
+.specHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px 10px;
+}
+.specHeader h3 { margin: 3px 0 0; font-size: 15px; }
+.documentState {
+  padding: 3px 8px;
+  color: var(--console-fog);
+  border: 1px solid var(--console-mist);
+  border-radius: var(--r-full);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.specHint { margin: 0; padding: 0 20px 10px; color: var(--console-smoke); font-size: 11px; }
+.specPicker {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px 12px;
+  overflow-x: auto;
+}
+.specPicker button {
+  min-width: 210px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid var(--console-mist);
+  border-radius: var(--r-md);
+  background: var(--console-soot);
+}
+.specPicker button:hover,
+.specPicker button[aria-pressed="true"] { border-color: var(--console-steel); background: var(--console-iron); }
+.specPicker span,
+.specPicker small { color: var(--console-smoke); font-size: 10px; }
+.specPicker strong { overflow: hidden; color: var(--console-fog); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.specCreate { display: grid; gap: 10px; padding: 4px 20px 16px; }
+.specCreate label,
+.sectionTools label,
+.compareRow label { display: grid; gap: 6px; color: var(--console-fog); font-size: 11px; }
+.specCreate .primaryButton,
+.sectionEditor .primaryButton,
+.sectionAppend .secondaryButton { justify-self: start; }
+.specTabs {
+  display: flex;
+  gap: 18px;
+  padding: 0 20px;
+  border-top: 1px solid var(--console-mist);
+  border-bottom: 1px solid var(--console-mist);
+}
+.specTabs button {
+  position: relative;
+  padding: 9px 0 8px;
+  color: var(--console-smoke);
+  font-size: 11px;
+  font-weight: 600;
+}
+.specTabs button[aria-selected="true"] { color: var(--console-snow); }
+.specTabs button[aria-selected="true"]::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--signal-cyan);
+}
+.specPanel { min-height: 112px; padding: 14px 20px; }
+.specSummary { display: grid; gap: 10px; margin: 0; }
+.specSummary div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+.specSummary dt { color: var(--console-smoke); font-size: 10px; text-transform: uppercase; }
+.specSummary dd { min-width: 0; margin: 0; color: var(--console-fog); }
+.specSummary code { overflow-wrap: anywhere; color: var(--console-snow); }
+.structuralReader { display: grid; gap: 8px; }
+.structuralReader pre,
+.diffViewer pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+  color: var(--console-fog);
+  border: 1px solid var(--console-mist);
+  border-radius: var(--r-md);
+  background: var(--console-iron);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.sectionTools { display: grid; gap: 16px; }
+.sectionTools > form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.sectionEditor,
+.sectionAppend { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--console-mist); }
+.sectionAppend h4 { margin: 0; font-size: 12px; }
+.specActions { display: flex; justify-content: flex-end; padding: 0 20px 16px; }
+.versionTools { display: grid; gap: 14px; }
+.compareRow { display: flex; align-items: end; gap: 8px; }
+.compareRow select { min-width: 120px; }
+.diffViewer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.diffViewer > div { min-width: 0; display: grid; gap: 5px; }
+.diffViewer span { color: var(--console-smoke); font-size: 10px; text-transform: uppercase; }
+.versionList { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.versionList li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--console-mist); }
+.versionList div { display: grid; gap: 2px; }
+.versionList span { color: var(--console-smoke); font-size: 10px; }
+.promotionPanel { display: grid; gap: 14px; }
+.promotionIntro { display: grid; gap: 8px; }
+.promotionIntro p { max-width: 70ch; margin: 0; color: var(--console-fog); }
+.promotionIntro code { overflow-x: auto; padding: 9px 10px; color: var(--signal-cyan); border: 1px solid var(--console-mist); border-radius: var(--r-md); background: var(--console-iron); white-space: nowrap; }
+.promotionPanel h4 { margin: 0; font-size: 12px; }
+.promotionList { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.promotionList li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--console-mist); }
+.promotionList li > div { display: grid; gap: 2px; }
+.promotionList strong { text-transform: capitalize; }
+.promotionList span,
+.promotionList small { color: var(--console-smoke); font-size: 10px; }
 .dialogGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .8fr); }
 .editColumn { display: grid; gap: 14px; padding: 20px; }
 .editColumn select { width: 100%; }
@@ -246,6 +365,7 @@
 .documentList button { width: 100%; display: grid; gap: 3px; padding: 12px 16px; text-align: left; }
 .documentList button[aria-pressed="true"] { background: var(--console-iron); }
 .documentList span { color: var(--console-smoke); font-size: 10px; }
+.documentList small { overflow: hidden; color: var(--console-fog); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .documentViewer { min-width: 0; padding: 20px; }
 .documentMeta { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .documentMeta span { color: var(--console-fog); font-size: 11px; }
@@ -277,6 +397,9 @@
   .itemDialog { max-height: 100vh; border-radius: 0; }
   .dialogGrid { grid-template-columns: 1fr; }
   .historyColumn { border-left: 0; border-top: 1px solid var(--console-mist); }
+  .sectionTools > form,
+  .diffViewer { grid-template-columns: 1fr; }
+  .compareRow { align-items: stretch; flex-direction: column; }
   .documentLayout { grid-template-columns: 1fr; }
   .documentList { border-right: 0; border-bottom: 1px solid var(--console-mist); }
   .auditList li { grid-template-columns: 1fr; gap: 3px; }

@@ -55,6 +55,11 @@ const VALUE_FLAGS = [
   '--content',
   '--content-file',
   '--expected-version',
+  '--heading',
+  '--section-hash',
+  '--from-version',
+  '--to-version',
+  '--version',
 ];
 
 /**
@@ -135,7 +140,16 @@ async function findItemThroughClient(client: CliTenboClient, repoRoot: string, i
   if (!client.isCloud) return findItem(repoRoot, itemId);
   const result = await client.query({ kind: 'getItem', item_id: itemId, include_archived: true });
   if (result.kind !== 'item') throw new Error(`expected item result, received ${result.kind}`);
-  return { scopeId: result.value.scope_id, filePath: '', item: result.value.item, archived: result.value.archived };
+  return {
+    scopeId: result.value.scope_id,
+    filePath: '',
+    item: result.value.item,
+    archived: result.value.archived,
+    dependsOn: result.value.depends_on ?? [],
+    unresolvedBlockers: result.value.unresolved_blockers ?? [],
+    readiness: result.value.readiness ?? 'ready',
+    specification: result.value.specification,
+  };
 }
 
 function typedItemResult(result: TenboCommandResult) {
@@ -155,6 +169,19 @@ function documentContent(repoRoot: string, args: string[]): string {
   if (file) return readFileSync(path.resolve(repoRoot, file), 'utf8');
   if (inline !== undefined) return inline;
   throw new Error('--content or --content-file is required');
+}
+
+function requiredPositiveOption(args: string[], name: string): number {
+  const raw = readOption(args, name);
+  const value = Number(raw);
+  if (!raw || !Number.isInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+
+function requiredOption(args: string[], name: string): string {
+  const value = readOption(args, name);
+  if (!value) throw new Error(`${name} is required`);
+  return value;
 }
 
 export async function runItemCli(repoRoot: string, args: string[]): Promise<CliResult> {
@@ -277,12 +304,37 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
       return serialize({ ok: true, result }, json, `${itemId} claim ${command === 'renew-claim' ? 'renewed' : 'released'}\n`);
     }
 
+    if (command === 'dependency-add' || command === 'dependency-remove') {
+      if (!value) return misuse(`Usage: tenbo-dashboard item ${command} <id> <prerequisite-id> [--expected-version <version>] [--fencing-token <n>]`, json);
+      const rawFence = readOption(args, '--fencing-token');
+      const fence = rawFence === undefined ? undefined : Number(rawFence);
+      if (fence !== undefined && (!Number.isInteger(fence) || fence <= 0)) {
+        return misuse('--fencing-token must be a positive integer', json);
+      }
+      const result = typedItemResult(await performTypedCommand(client, {
+        kind: command === 'dependency-add' ? 'addDependency' : 'removeDependency',
+        item_id: itemId,
+        prerequisite_id: value,
+        ...(readOption(args, '--expected-version') ? { expected_version: readOption(args, '--expected-version') } : {}),
+        ...(fence !== undefined ? { fencing_token: fence } : {}),
+      }, agent));
+      return serialize({
+        ok: true,
+        item: result.value.item,
+        version: result.value.version,
+        depends_on: result.value.depends_on ?? [],
+        unresolved_blockers: result.value.unresolved_blockers ?? [],
+        readiness: result.value.readiness ?? 'ready',
+      }, json, `${itemId} dependency ${command === 'dependency-add' ? 'added' : 'removed'}: ${value}\n`);
+    }
+
     if (command === 'document-create') {
       const kind = planningKind(readOption(args, '--kind'));
       const result = await performTypedCommand(client, {
         kind: 'createPlanningDocument', item_id: itemId, document_kind: kind,
         ...(readOption(args, '--slug') ? { slug: readOption(args, '--slug') } : {}),
         content: documentContent(repoRoot, args),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
       }, agent);
       if (result.kind !== 'document') throw new Error(`expected document result, received ${result.kind}`);
       return serialize({ ok: true, document: result.value }, json, `${result.value.path} created\n`);
@@ -291,17 +343,70 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
     if (command === 'document-update') {
       const result = await performTypedCommand(client, {
         kind: 'updatePlanningDocument', document_id: itemId, content: documentContent(repoRoot, args),
-        ...(readOption(args, '--expected-version') ? { expected_version: readOption(args, '--expected-version') } : {}),
+        expected_version: requiredOption(args, '--expected-version'),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
       }, agent);
       if (result.kind !== 'document') throw new Error(`expected document result, received ${result.kind}`);
       return serialize({ ok: true, document: result.value }, json, `${result.value.path} updated\n`);
+    }
+
+    if (command === 'document-section-replace' || command === 'document-section-append') {
+      const replacing = command === 'document-section-replace';
+      const result = await performTypedCommand(client, replacing ? {
+        kind: 'replacePlanningDocumentSection',
+        document_id: itemId,
+        heading: requiredOption(args, '--heading'),
+        content: documentContent(repoRoot, args),
+        expected_section_hash: requiredOption(args, '--section-hash'),
+        expected_version: requiredOption(args, '--expected-version'),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
+      } : {
+        kind: 'appendPlanningDocumentSection',
+        document_id: itemId,
+        heading: requiredOption(args, '--heading'),
+        content: documentContent(repoRoot, args),
+        expected_version: requiredOption(args, '--expected-version'),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
+      }, agent);
+      if (result.kind !== 'document') throw new Error(`expected document result, received ${result.kind}`);
+      return serialize({ ok: true, document: result.value }, json, `${result.value.path} section updated\n`);
+    }
+
+    if (command === 'document-versions') {
+      const result = await client.query({ kind: 'getDocumentVersions', document_id: itemId });
+      if (result.kind !== 'documentVersionPage') throw new Error(`expected documentVersionPage, received ${result.kind}`);
+      return serialize({ ok: true, versions: result.value, page: result.page }, json, `${result.value.length} version(s)\n`);
+    }
+
+    if (command === 'document-diff') {
+      const result = await client.query({
+        kind: 'compareDocumentVersions',
+        document_id: itemId,
+        from_version: requiredOption(args, '--from-version'),
+        to_version: requiredOption(args, '--to-version'),
+      });
+      if (result.kind !== 'documentDiff') throw new Error(`expected documentDiff, received ${result.kind}`);
+      return serialize({ ok: true, diff: result.value }, json, 'document versions compared\n');
+    }
+
+    if (command === 'document-version-restore') {
+      const result = await performTypedCommand(client, {
+        kind: 'restorePlanningDocumentVersion',
+        document_id: itemId,
+        version: requiredOption(args, '--version'),
+        expected_version: requiredOption(args, '--expected-version'),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
+      }, agent);
+      if (result.kind !== 'document') throw new Error(`expected document result, received ${result.kind}`);
+      return serialize({ ok: true, document: result.value }, json, `${result.value.path} version restored\n`);
     }
 
     if (command === 'document-archive' || command === 'document-restore') {
       const result = await performTypedCommand(client, {
         kind: command === 'document-archive' ? 'archivePlanningDocument' : 'restorePlanningDocument',
         document_id: itemId,
-        ...(readOption(args, '--expected-version') ? { expected_version: readOption(args, '--expected-version') } : {}),
+        expected_version: requiredOption(args, '--expected-version'),
+        fencing_token: requiredPositiveOption(args, '--fencing-token'),
       }, agent);
       if (result.kind !== 'document') throw new Error(`expected document result, received ${result.kind}`);
       return serialize({ ok: true, document: result.value }, json, `${result.value.path} ${command === 'document-archive' ? 'archived' : 'restored'}\n`);
@@ -309,7 +414,15 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
 
     if (command === 'show') {
       const located = await findItemThroughClient(client, repoRoot, itemId);
-      return serialize({ ok: true, scope: located.scopeId, item: located.item }, json, `${itemId}: ${located.item.title} (${located.item.status})\n`);
+      return serialize({
+        ok: true,
+        scope: located.scopeId,
+        item: located.item,
+        depends_on: 'dependsOn' in located ? located.dependsOn : located.item.depends_on ?? [],
+        unresolved_blockers: 'unresolvedBlockers' in located ? located.unresolvedBlockers : [],
+        readiness: 'readiness' in located ? located.readiness : 'ready',
+        ...('specification' in located && located.specification ? { specification: located.specification } : {}),
+      }, json, `${itemId}: ${located.item.title} (${located.item.status})\n`);
     }
 
     if (command === 'brief') {
@@ -319,6 +432,10 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
         ok: true,
         scope: located.scopeId,
         item: summarizeItem(located),
+        depends_on: 'dependsOn' in located ? located.dependsOn : item.depends_on ?? [],
+        unresolved_blockers: 'unresolvedBlockers' in located ? located.unresolvedBlockers : [],
+        readiness: 'readiness' in located ? located.readiness : 'ready',
+        ...('specification' in located && located.specification ? { specification: located.specification } : {}),
         files_to_read: item.files_to_read ?? [],
         acceptance_criteria: item.done_when ?? [],
         risks: item.risks ?? [],

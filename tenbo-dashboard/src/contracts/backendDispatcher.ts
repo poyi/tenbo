@@ -28,6 +28,10 @@ export async function dispatchBackendQuery(backend: TenboBackendPorts, request: 
       return backend.context.item(query.item_id);
     case 'getDocument':
       return { kind: 'document', value: await backend.documents.get(query.document_id) };
+    case 'getDocumentVersions':
+    case 'compareDocumentVersions':
+    case 'listDocumentPromotions':
+      throw new TenboContractError('unsupported', `${query.kind} is available only through the cloud gateway`);
     case 'searchDocuments': {
       const result = await backend.documents.search(query.query, query.kind_filter, query.page);
       return { kind: 'documentPage', value: result.documents, page: result.page };
@@ -52,11 +56,18 @@ export async function dispatchBackendCommand(backend: TenboBackendPorts, request
       return backend.coordination.execute(command, request.actor);
     case 'createPlanningDocument':
     case 'updatePlanningDocument':
+    case 'replacePlanningDocumentSection':
+    case 'appendPlanningDocumentSection':
+    case 'restorePlanningDocumentVersion':
     case 'archivePlanningDocument':
     case 'restorePlanningDocument':
       return backend.documents.execute(command, request.actor);
     case 'ingestGitDocument':
       return backend.gitDocuments.execute(command, request.actor);
+    case 'beginDocumentPromotion':
+    case 'abandonDocumentPromotion':
+    case 'finalizeDocumentPromotion':
+      throw new TenboContractError('unsupported', `${command.kind} is available only through the cloud gateway`);
     case 'importProject':
       return backend.project.importProject(command.manifest, request.actor, command.replace);
     case 'beginProjectImport':
@@ -75,6 +86,8 @@ export async function dispatchBackendCommand(backend: TenboBackendPorts, request
     case 'setDocUpdate':
     case 'linkCommit':
     case 'completeItem':
+    case 'addDependency':
+    case 'removeDependency':
       return backend.items.execute(command, request.actor);
     default:
       throw new TenboContractError('unsupported', `unsupported command: ${(command as { kind?: string }).kind ?? 'unknown'}`);

@@ -131,6 +131,12 @@ export interface Item {
    */
   related?: string[];
   /**
+   * Executable prerequisites. The source item is ready only when every referenced
+   * item is `done`; `dropped` prerequisites remain unsatisfied. In cloud mode the
+   * relation table owns these edges and this field is only a projection.
+   */
+  depends_on?: string[];
+  /**
    * Stamped during Behavior 5 DoD when this item flips to `done`.
    * Either an ISO date (`YYYY-MM-DD`) confirming the layer's intent.md/code-map.md
    * was updated as part of completing this item, OR `skipped — <reason>` for

@@ -1,19 +1,34 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { LocalTenboBackend } from '../src/api/backends/LocalTenboBackend';
 import { createCloudBackend } from '../src/cloud/createCloudBackend';
 import { loadCloudConfig } from '../src/cloud/cloudConfig';
-import { dirtyGitDocumentOverlay, ingestExactCommitGitDocument } from '../src/cloud/trustedGitDocuments';
-import type { ActorDto, TenboQuery } from '../src/contracts/tenbo';
+import {
+  dirtyGitDocumentOverlay,
+  ingestExactCommitGitDocument,
+  readExactCommitGitDocument,
+  rollbackDocumentPromotionPatch,
+  writeDocumentPromotionPatch,
+} from '../src/cloud/trustedGitDocuments';
+import {
+  TENBO_BACKEND_EPOCH,
+  TENBO_CLIENT_VERSION,
+  TENBO_SCHEMA_VERSION,
+  type ActorDto,
+  type DocumentPromotionAttemptDto,
+  type TenboCommand,
+  type TenboQuery,
+} from '../src/contracts/tenbo';
 import { buildCloudRoadmapManifest, assertCloudRoadmapManifest } from '../src/migration/cloudRoadmapManifest';
 import { cloudRoadmapImportIdentity, CloudMigrationService, type CloudRecoveryExport } from '../src/migration/cloudMigrationService';
 import { runBenchmarkProbe, runCloudBenchmark, type BenchmarkDurations } from '../src/cloud/cloudBenchmark';
 import { hasFlag, positionalArgs, readOption } from './cliArgs';
 import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
 
-const VALUE_FLAGS = ['--output', '--manifest', '--input', '--confirm-project', '--kind', '--item', '--query', '--commit', '--path', '--fixture'];
+const VALUE_FLAGS = ['--output', '--manifest', '--input', '--confirm-project', '--kind', '--item', '--query', '--commit', '--path', '--fixture', '--document', '--target', '--fencing-token', '--attempt'];
 
 export async function runCloudCli(repoRoot: string, args: string[]): Promise<CliResult> {
   const json = hasFlag(args, '--json');
@@ -92,6 +107,77 @@ export async function runCloudCli(repoRoot: string, args: string[]): Promise<Cli
       const document = await ingestExactCommitGitDocument(backend.ports, repoRoot, commit, documentPath, actor);
       return serialize({ ok: true, document }, json, `${document.commit_sha}:${document.path} ${document.content_hash}\n`);
     }
+    if (command === 'promote-document') {
+      const documentId = readOption(args, '--document');
+      const target = readOption(args, '--target');
+      const fencingToken = positiveIntegerOption(args, '--fencing-token');
+      if (!documentId || !target || fencingToken === undefined) {
+        return misuse('cloud promote-document requires --document <uuid> --target <repo-relative-path> --fencing-token <number>', json);
+      }
+      const patch = await writeDocumentPromotionPatch(backend.ports, repoRoot, documentId, target);
+      try {
+        const result = await cloudCommand(backend, config.projectId, actor, {
+          kind: 'beginDocumentPromotion', document_id: patch.document_id,
+          expected_version: patch.source_version, source_content_hash: patch.source_content_hash,
+          target_repository: patch.target_repository, target_path: patch.target_path,
+          fencing_token: fencingToken,
+        });
+        if (result.kind !== 'promotion') throw new Error(`expected promotion result, received ${result.kind}`);
+        return serialize({ ok: true, promotion: result.value, patch: patch.target_path }, json,
+          `created ${patch.target_path} and promotion ${result.value.id} from v${patch.source_version}\n`);
+      } catch (cause) {
+        rollbackDocumentPromotionPatch(repoRoot, patch);
+        throw cause;
+      }
+    }
+    if (command === 'promotions') {
+      const result = await backend.query({
+        schema_version: TENBO_SCHEMA_VERSION, client_version: TENBO_CLIENT_VERSION,
+        backend_epoch: TENBO_BACKEND_EPOCH, project_id: config.projectId,
+        query: {
+          kind: 'listDocumentPromotions',
+          ...(readOption(args, '--item') ? { item_id: readOption(args, '--item') } : {}),
+          ...(readOption(args, '--document') ? { document_id: readOption(args, '--document') } : {}),
+          ...(readOption(args, '--attempt') ? { attempt_id: readOption(args, '--attempt') } : {}),
+          page: { limit: 100 },
+        },
+      });
+      if (result.kind !== 'promotionPage') throw new Error(`expected promotionPage, received ${result.kind}`);
+      return serialize({ ok: true, promotions: result.value, page: result.page }, json,
+        result.value.map((attempt) => `${attempt.id} ${attempt.status} ${attempt.target_path}`).join('\n') + (result.value.length ? '\n' : ''));
+    }
+    if (command === 'abandon-promotion') {
+      const attemptId = readOption(args, '--attempt');
+      const fencingToken = positiveIntegerOption(args, '--fencing-token');
+      if (!attemptId || fencingToken === undefined) return misuse('cloud abandon-promotion requires --attempt <uuid> --fencing-token <number>', json);
+      const attempt = await promotionAttempt(backend, config.projectId, attemptId);
+      const result = await cloudCommand(backend, config.projectId, actor, {
+        kind: 'abandonDocumentPromotion', attempt_id: attempt.id,
+        expected_version: attempt.version, fencing_token: fencingToken,
+      });
+      if (result.kind !== 'promotion') throw new Error(`expected promotion result, received ${result.kind}`);
+      return serialize({ ok: true, promotion: result.value }, json, `abandoned promotion ${result.value.id}\n`);
+    }
+    if (command === 'finalize-promotion') {
+      const attemptId = readOption(args, '--attempt');
+      const commit = readOption(args, '--commit');
+      if (!attemptId || !commit) return misuse('cloud finalize-promotion requires --attempt <uuid> --commit <full-sha>', json);
+      const attempt = await promotionAttempt(backend, config.projectId, attemptId);
+      const document = readExactCommitGitDocument(repoRoot, commit, attempt.target_path, attempt.target_repository);
+      const result = await cloudCommand(backend, config.projectId, actor, {
+        kind: 'finalizeDocumentPromotion', attempt_id: attempt.id, ...document,
+      });
+      if (result.kind !== 'promotion' && result.kind !== 'promotionRejected') {
+        throw new Error(`expected promotion result, received ${result.kind}`);
+      }
+      const ok = result.kind === 'promotion';
+      return {
+        ...serialize({ ok, result }, json, ok
+          ? `finalized promotion ${result.value.id} at ${document.commit_sha}\n`
+          : `rejected promotion ${result.value.id}: ${result.reason}\n`),
+        ...(ok ? {} : { exitCode: 1 }),
+      };
+    }
     if (command === 'dirty-overlay') {
       const commit = readOption(args, '--commit');
       const documentPath = readOption(args, '--path');
@@ -152,6 +238,44 @@ function coldProcessProbe(fixturePath: string): BenchmarkDurations & { process_w
 
 function round(value: number): number { return Math.round(value * 100) / 100; }
 
+async function cloudCommand(
+  backend: ReturnType<typeof createCloudBackend>,
+  projectId: string,
+  actor: ActorDto,
+  command: TenboCommand,
+) {
+  return backend.command({
+    schema_version: TENBO_SCHEMA_VERSION,
+    client_version: TENBO_CLIENT_VERSION,
+    backend_epoch: TENBO_BACKEND_EPOCH,
+    project_id: projectId,
+    mutation_id: randomUUID(),
+    actor,
+    command,
+  });
+}
+
+async function promotionAttempt(
+  backend: ReturnType<typeof createCloudBackend>,
+  projectId: string,
+  attemptId: string,
+): Promise<DocumentPromotionAttemptDto> {
+  const result = await backend.query({
+    schema_version: TENBO_SCHEMA_VERSION, client_version: TENBO_CLIENT_VERSION,
+    backend_epoch: TENBO_BACKEND_EPOCH, project_id: projectId,
+    query: { kind: 'listDocumentPromotions', attempt_id: attemptId, page: { limit: 1 } },
+  });
+  if (result.kind !== 'promotionPage' || result.value.length !== 1) throw new Error(`promotion attempt not found: ${attemptId}`);
+  return result.value[0]!;
+}
+
+function positiveIntegerOption(args: string[], flag: string): number | undefined {
+  const value = readOption(args, flag);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function helpText(): string {
   return `tenbo-dashboard cloud <command>
 
@@ -163,6 +287,14 @@ Commands:
   export [--output <file>]                    Create deterministic recovery export
   restore --input <file> --confirm-project <uuid>  Atomically replace from verified recovery
   ingest-git --commit <full-sha> --path <path>     Ingest bytes read only via exact git show
+  promote-document --document <uuid> --target <path> --fencing-token <n>
+                                                Create a reviewable patch and record exact source
+  promotions [--item <id>|--document <uuid>|--attempt <uuid>]
+                                                List promotion attempts and canonical state
+  abandon-promotion --attempt <uuid> --fencing-token <n>
+                                                Abandon an open promotion without changing the source
+  finalize-promotion --attempt <uuid> --commit <full-sha>
+                                                Admin finalization from exact committed Git bytes
   dirty-overlay --commit <full-sha> --path <path>  Show local-only dirty overlay; never persist
   benchmark --fixture <file>                   Run pinned 3+30 warm / 5 cold-process p95 gates
 `;

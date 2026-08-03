@@ -1,10 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenboBackendPorts } from '../contracts/tenbo';
-import { dirtyGitDocumentOverlay, ingestExactCommitGitDocument, overlayDirtyGitContext, readExactCommitGitDocument } from './trustedGitDocuments';
+import {
+  dirtyGitDocumentOverlay,
+  ingestExactCommitGitDocument,
+  overlayDirtyGitContext,
+  readExactCommitGitDocument,
+  rollbackDocumentPromotionPatch,
+  writeDocumentPromotionPatch,
+} from './trustedGitDocuments';
 
 const roots: string[] = [];
 afterEach(() => { while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true }); });
@@ -66,6 +73,24 @@ describe('trusted exact-commit Git ingestion', () => {
     } as unknown as TenboBackendPorts;
     await ingestExactCommitGitDocument(ports, repo, sha, 'guide.md', { id: 'ci', type: 'agent' });
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ content: 'trusted\n', commit_sha: sha }), { id: 'ci', type: 'agent' });
+  });
+
+  it('creates a reviewable new file without overwriting repository content', async () => {
+    const repo = fixtureRepo();
+    const ports = {
+      documents: { get: async () => ({
+        id: '00000000-0000-4000-8000-000000000010', item_id: 'x-105',
+        source_kind: 'planning' as const, kind: 'spec' as const,
+        path: '.tenbo/specs/x-105.md', content: '# Canonical spec\n',
+        version: '4', archived: false,
+      }) },
+    } as unknown as TenboBackendPorts;
+    const patch = await writeDocumentPromotionPatch(ports, repo, '00000000-0000-4000-8000-000000000010', 'docs/cloud-tenbo.md');
+    expect(readFileSync(path.join(repo, 'docs/cloud-tenbo.md'), 'utf8')).toBe('# Canonical spec\n');
+    expect(patch).toMatchObject({ source_version: '4', item_id: 'x-105', target_path: 'docs/cloud-tenbo.md' });
+    await expect(writeDocumentPromotionPatch(ports, repo, patch.document_id, patch.target_path)).rejects.toThrow(/never overwrites/);
+    rollbackDocumentPromotionPatch(repo, patch);
+    expect(existsSync(path.join(repo, patch.target_path))).toBe(false);
   });
 });
 

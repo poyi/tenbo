@@ -26,7 +26,7 @@ export interface MigrationItem extends Item {
 export interface MigrationRelation {
   source_item_id: string;
   target_item_id: string;
-  relation_type: 'spawned_from' | 'related' | 'supersedes';
+  relation_type: 'spawned_from' | 'related' | 'depends_on' | 'supersedes';
   metadata: { unresolved_legacy?: true };
 }
 
@@ -186,6 +186,7 @@ function buildRelations(items: MigrationItem[], itemIds: Set<string>): Migration
     add(item.id, item.spawned_from, 'spawned_from');
     add(item.id, item.superseded_by, 'supersedes');
     for (const related of item.related ?? []) add(item.id, related, 'related');
+    for (const prerequisite of item.depends_on ?? []) add(item.id, prerequisite, 'depends_on');
   }
   return [...keyed.values()].sort((a, b) =>
     a.source_item_id.localeCompare(b.source_item_id) || a.relation_type.localeCompare(b.relation_type) || a.target_item_id.localeCompare(b.target_item_id));

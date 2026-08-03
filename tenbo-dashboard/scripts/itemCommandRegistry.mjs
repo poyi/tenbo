@@ -45,23 +45,58 @@ export const ITEM_COMMANDS = [
     summary: 'Release the current fenced item claim.',
   },
   {
+    name: 'dependency-add',
+    usage: 'tenbo-dashboard item dependency-add <id> <prerequisite-id> [--expected-version <version>] [--fencing-token <n>] [--json]',
+    summary: 'Add an executable prerequisite using the canonical dependency graph.',
+  },
+  {
+    name: 'dependency-remove',
+    usage: 'tenbo-dashboard item dependency-remove <id> <prerequisite-id> [--expected-version <version>] [--fencing-token <n>] [--json]',
+    summary: 'Remove an executable prerequisite using the canonical dependency graph.',
+  },
+  {
     name: 'document-create',
-    usage: 'tenbo-dashboard item document-create <item-id> --kind <spec|workpad|handoff> [--slug <slug>] (--content "<markdown>"|--content-file <path>) [--json]',
+    usage: 'tenbo-dashboard item document-create <item-id> --kind <spec|workpad|handoff> [--slug <slug>] (--content "<markdown>"|--content-file <path>) --fencing-token <n> [--json]',
     summary: 'Create and attach a planning document.',
   },
   {
     name: 'document-update',
-    usage: 'tenbo-dashboard item document-update <document-path> (--content "<markdown>"|--content-file <path>) [--expected-version <version>] [--json]',
-    summary: 'Update a planning document with an optional version guard.',
+    usage: 'tenbo-dashboard item document-update <document-id> (--content "<markdown>"|--content-file <path>) --expected-version <version> --fencing-token <n> [--json]',
+    summary: 'Replace a planning document through version and claim-fence guards.',
+  },
+  {
+    name: 'document-section-replace',
+    usage: 'tenbo-dashboard item document-section-replace <document-id> --heading "<heading>" (--content "<markdown>"|--content-file <path>) --section-hash <sha256> --expected-version <version> --fencing-token <n> [--json]',
+    summary: 'Replace one uniquely named Markdown section atomically.',
+  },
+  {
+    name: 'document-section-append',
+    usage: 'tenbo-dashboard item document-section-append <document-id> --heading "<heading>" (--content "<markdown>"|--content-file <path>) --expected-version <version> --fencing-token <n> [--json]',
+    summary: 'Append one new uniquely named Markdown section atomically.',
+  },
+  {
+    name: 'document-versions',
+    usage: 'tenbo-dashboard item document-versions <document-id> [--json]',
+    summary: 'List immutable planning-document versions.',
+  },
+  {
+    name: 'document-diff',
+    usage: 'tenbo-dashboard item document-diff <document-id> --from-version <version> --to-version <version> [--json]',
+    summary: 'Compare two immutable planning-document versions.',
+  },
+  {
+    name: 'document-version-restore',
+    usage: 'tenbo-dashboard item document-version-restore <document-id> --version <version> --expected-version <current-version> --fencing-token <n> [--json]',
+    summary: 'Restore an older version as a new immutable current version.',
   },
   {
     name: 'document-archive',
-    usage: 'tenbo-dashboard item document-archive <document-path> [--expected-version <version>] [--json]',
+    usage: 'tenbo-dashboard item document-archive <document-id> --expected-version <version> --fencing-token <n> [--json]',
     summary: 'Archive a spec, workpad, or handoff.',
   },
   {
     name: 'document-restore',
-    usage: 'tenbo-dashboard item document-restore <document-path> [--expected-version <version>] [--json]',
+    usage: 'tenbo-dashboard item document-restore <document-id> --expected-version <version> --fencing-token <n> [--json]',
     summary: 'Restore an archived planning document.',
   },
   {

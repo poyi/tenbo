@@ -6,6 +6,10 @@ import {
   TENBO_CLIENT_VERSION,
   type ItemClaimDto,
   type ActiveClaimPageDto,
+  type ContextResultDto,
+  type DocumentSearchResultDto,
+  type DocumentPromotionAttemptDto,
+  type DocumentVersionDto,
   type ItemFiltersDto,
   type ItemPageDto,
   type ItemRecordDto,
@@ -97,7 +101,62 @@ export class CloudDashboardClient {
       page: boundedPage(page, DASHBOARD_AUX_PAGE_SIZE),
     }, projectId);
     if (result.kind !== 'documentPage') throw unexpected('documentPage', result);
-    return { documents: result.value as TenboDocumentDto[], page: result.page };
+    return { documents: result.value as DocumentSearchResultDto[], page: result.page };
+  }
+
+  async getDocument(projectId: string, documentId: string): Promise<TenboDocumentDto> {
+    const result = await this.query({ kind: 'getDocument', document_id: documentId }, projectId);
+    if (result.kind !== 'document') throw unexpected('document', result);
+    return result.value;
+  }
+
+  async getItemContext(projectId: string, itemId: string, options: {
+    documentMode?: 'summary' | 'section' | 'full';
+    section?: string;
+    continuationCursor?: string;
+  } = {}): Promise<ContextResultDto> {
+    const result = await this.query({
+      kind: 'getItemContext', item_id: itemId,
+      ...(options.documentMode ? { document_mode: options.documentMode } : {}),
+      ...(options.section ? { section: options.section } : {}),
+      ...(options.continuationCursor ? { continuation_cursor: options.continuationCursor } : {}),
+    }, projectId);
+    if (result.kind !== 'context') throw unexpected('context', result);
+    return result;
+  }
+
+  async getDocumentVersions(projectId: string, documentId: string, page: PageRequestDto = {}) {
+    const result = await this.query({
+      kind: 'getDocumentVersions', document_id: documentId,
+      page: boundedPage(page, DASHBOARD_AUX_PAGE_SIZE),
+    }, projectId);
+    if (result.kind !== 'documentVersionPage') throw unexpected('documentVersionPage', result);
+    return { versions: result.value as DocumentVersionDto[], page: result.page };
+  }
+
+  async compareDocumentVersions(projectId: string, documentId: string, fromVersion: string, toVersion: string) {
+    const result = await this.query({
+      kind: 'compareDocumentVersions', document_id: documentId,
+      from_version: fromVersion, to_version: toVersion,
+    }, projectId);
+    if (result.kind !== 'documentDiff') throw unexpected('documentDiff', result);
+    return result.value;
+  }
+
+  async listDocumentPromotions(projectId: string, filters: {
+    itemId?: string;
+    documentId?: string;
+    attemptId?: string;
+  }, page: PageRequestDto = {}) {
+    const result = await this.query({
+      kind: 'listDocumentPromotions',
+      ...(filters.itemId ? { item_id: filters.itemId } : {}),
+      ...(filters.documentId ? { document_id: filters.documentId } : {}),
+      ...(filters.attemptId ? { attempt_id: filters.attemptId } : {}),
+      page: boundedPage(page, DASHBOARD_AUX_PAGE_SIZE),
+    }, projectId);
+    if (result.kind !== 'promotionPage') throw unexpected('promotionPage', result);
+    return { promotions: result.value as DocumentPromotionAttemptDto[], page: result.page };
   }
 
   async command(projectId: string, command: TenboCommand): Promise<TenboCommandResult> {

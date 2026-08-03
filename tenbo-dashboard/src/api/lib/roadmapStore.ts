@@ -352,6 +352,7 @@ export type RichItemPatch = Partial<Pick<Item,
   | 'spawned_from'
   | 'superseded_by'
   | 'related'
+  | 'depends_on'
   | 'workpad'
   | 'doc_update'
   | 'dispatch_attempts'
@@ -371,6 +372,7 @@ export function updateItemRichFields(
     'title', 'description', 'layer', 'layers', 'links', 'affects', 'done_when',
     'files_to_read', 'risks', 'type', 'priority', 'goal_ref', 'phases',
     'spawned_from', 'superseded_by', 'related', 'workpad', 'doc_update',
+    'depends_on',
     'dispatch_attempts', 'bar_override',
   ]);
   const unknown = Object.keys(patch).filter((key) => !allowed.has(key));
@@ -399,6 +401,9 @@ export function createRoadmapItem(repoRoot: string, scopeId: string, item: Item)
   assertLegacyRoadmapWritesAllowed(repoRoot);
   if (!item.id || !item.title || !item.description || !item.status) {
     throw new RoadmapStoreError('invalid_args', 'item id, title, description, and status are required');
+  }
+  if (!/^[a-z][a-z0-9-]*-\d{3,}(?:\.[a-z0-9]+)*$/i.test(item.id)) {
+    throw new RoadmapStoreError('invalid_args', `new item id ${item.id} must use at least three digits`);
   }
   try {
     findRef(repoRoot, item.id, true);

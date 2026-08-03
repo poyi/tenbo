@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ActorDto, ContextResultDto, GitDocumentDto, JsonValue, TenboBackendPorts } from '../contracts/tenbo';
 
@@ -18,6 +18,50 @@ export interface DirtyGitDocumentOverlay extends ExactCommitGitDocument {
   persisted: false;
   base_content_hash: string;
   deleted?: boolean;
+}
+
+export interface PromotionPatch {
+  document_id: string;
+  item_id: string;
+  source_version: string;
+  source_content_hash: string;
+  target_repository: string;
+  target_path: string;
+  absolute_path: string;
+}
+
+export async function writeDocumentPromotionPatch(
+  ports: TenboBackendPorts,
+  repoRoot: string,
+  documentId: string,
+  targetPath: string,
+): Promise<PromotionPatch> {
+  const document = await ports.documents.get(documentId);
+  if (document.source_kind !== 'planning') throw new Error('only a cloud planning document can be promoted');
+  if (document.archived) throw new Error('restore the planning document before promoting it');
+  const normalizedPath = normalizeGitPath(targetPath);
+  const absolutePath = path.resolve(repoRoot, ...normalizedPath.split('/'));
+  assertInsideRepository(repoRoot, absolutePath);
+  if (existsSync(absolutePath)) throw new Error(`${normalizedPath} already exists; promotion never overwrites repository files`);
+  const repository = gitText(repoRoot, ['config', '--get', 'remote.origin.url']).trim();
+  if (!repository) throw new Error('Git remote.origin.url is required for promotion');
+  mkdirSync(path.dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, document.content, { encoding: 'utf8', flag: 'wx' });
+  return {
+    document_id: document.id,
+    item_id: document.item_id,
+    source_version: document.version,
+    source_content_hash: sha256(Buffer.from(document.content, 'utf8')),
+    target_repository: repository,
+    target_path: normalizedPath,
+    absolute_path: absolutePath,
+  };
+}
+
+/** Roll back only the new file created by writeDocumentPromotionPatch. */
+export function rollbackDocumentPromotionPatch(repoRoot: string, patch: PromotionPatch): void {
+  assertInsideRepository(repoRoot, patch.absolute_path);
+  if (existsSync(patch.absolute_path)) unlinkSync(patch.absolute_path);
 }
 
 export function readExactCommitGitDocument(
@@ -125,6 +169,11 @@ function normalizeGitPath(value: string): string {
   const normalized = path.posix.normalize(value);
   if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) throw new Error('Git document path escaped repository');
   return normalized;
+}
+
+function assertInsideRepository(repoRoot: string, absolutePath: string): void {
+  const relative = path.relative(path.resolve(repoRoot), absolutePath);
+  if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('promotion path escaped repository');
 }
 
 function documentKind(documentPath: string): string {

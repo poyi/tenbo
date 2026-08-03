@@ -110,6 +110,30 @@ describe('validator — relationships', () => {
     };
     expect(warnMsgsFor(state, 'ed-001')).toEqual([]);
   });
+
+  it('accepts legacy short ids in dependency reads while rejecting missing prerequisites', () => {
+    const state = stateWithItems([
+      baseItem({ id: 'ed-97' }),
+      baseItem({ id: 'ed-101', depends_on: ['ed-97'] }),
+    ]);
+    expect(errMsgsFor(state, 'ed-101')).toEqual([]);
+
+    const missing = stateWithItems([baseItem({ id: 'ed-101', depends_on: ['ed-999'] })]);
+    expect(errMsgsFor(missing, 'ed-101')).toContain("ed-101 depends_on references unknown id 'ed-999'");
+  });
+
+  it('rejects self dependencies, duplicates, and workspace-wide cycles', () => {
+    const state = stateWithItems([
+      baseItem({ id: 'ed-001', depends_on: ['ed-002'] }),
+      baseItem({ id: 'ed-002', depends_on: ['ed-003', 'ed-003'] }),
+      baseItem({ id: 'ed-003', depends_on: ['ed-001'] }),
+      baseItem({ id: 'ed-004', depends_on: ['ed-004'] }),
+    ]);
+    const validation = validate(state);
+    expect(validation.errors.some((entry) => entry.message.includes('depends_on cycle:'))).toBe(true);
+    expect(errMsgsFor(state, 'ed-004').some((message) => message.includes('cannot reference itself'))).toBe(true);
+    expect(warnMsgsFor(state, 'ed-002').some((message) => message.includes("duplicate id 'ed-003'"))).toBe(true);
+  });
 });
 
 describe('childrenOf helper', () => {

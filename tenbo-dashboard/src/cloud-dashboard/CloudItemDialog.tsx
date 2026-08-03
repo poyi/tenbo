@@ -9,6 +9,7 @@ import type {
 } from '../contracts/tenbo';
 import type { Status } from '../types';
 import { CloudDashboardClient } from './client';
+import { CloudItemSpecifications } from './CloudItemSpecifications';
 import { errorMessage } from './useCloudItems';
 import styles from './CloudDashboard.module.css';
 
@@ -171,6 +172,16 @@ export function CloudItemDialog({ client, projectId, initial, userId, role, onCl
             </>
           ) : <span>Owned by {claim.owner}; fence {claim.fencing_token}.</span>}
         </div>
+
+        <CloudItemSpecifications
+          client={client}
+          projectId={projectId}
+          record={record}
+          role={role}
+          ownsClaim={ownClaim}
+          fencingToken={ownClaim ? claim?.fencing_token : undefined}
+          onRefresh={refresh}
+        />
 
         <div className={styles.dialogGrid}>
           <div className={styles.editColumn}>

@@ -34,13 +34,19 @@ export interface PortableCloudProjection {
   documents: MigrationPlanningDocument[];
   mutations: MigrationMutation[];
   claims: MigrationClaim[];
+  /** Recovery-only cloud-native state; excluded from roadmap comparison. */
+  promotion_attempts?: Record<string, JsonValue>[];
+  promotion_git_documents?: Record<string, JsonValue>[];
+  document_canonical_states?: Record<string, JsonValue>[];
 }
+
+type PortableProjectionCollection = 'items' | 'relations' | 'documents' | 'mutations' | 'claims';
 
 export interface CloudProjectionComparison {
   equal: boolean;
   local_hash: string;
   cloud_hash: string;
-  counts: { local: Record<keyof PortableCloudProjection, number>; cloud: Record<keyof PortableCloudProjection, number> };
+  counts: { local: Record<PortableProjectionCollection, number>; cloud: Record<PortableProjectionCollection, number> };
   missing_item_ids: string[];
   unexpected_item_ids: string[];
   differing_item_ids: string[];
@@ -380,7 +386,8 @@ export function normalizeCloudExport(value: JsonValue, options: { includeAllMuta
     } as MigrationRelation;
   });
   const versions = array(root.document_versions).map((entry) => object(entry, 'document version'));
-  const documents = array(root.documents).map((entry) => object(entry, 'cloud document'))
+  const rawDocuments = array(root.documents).map((entry) => object(entry, 'cloud document'));
+  const documents = rawDocuments
     .filter((row) => row.source_kind === 'planning')
     .map((row) => {
       const documentVersions = versions.filter((version) => version.document_id === row.id)
@@ -423,14 +430,42 @@ export function normalizeCloudExport(value: JsonValue, options: { includeAllMuta
       version: number(row.heartbeat_version), expires_at: string(row.expires_at),
     } as MigrationClaim;
   });
-  return sortProjection({ items, relations, documents, mutations, claims });
+  const promotionAttempts = options.includeAllMutations
+    ? array(root.promotion_attempts).map((entry) => object(entry, 'promotion attempt'))
+    : undefined;
+  const promotedGitIds = new Set((promotionAttempts ?? []).flatMap((attempt) =>
+    typeof attempt.git_document_id === 'string' ? [attempt.git_document_id] : []));
+  const promotionGitDocuments = options.includeAllMutations
+    ? rawDocuments.filter((row) => row.source_kind === 'git' && promotedGitIds.has(string(row.id))).map((row) => {
+      const latest = versions.filter((version) => version.document_id === row.id)
+        .sort((a, b) => number(b.version_number) - number(a.version_number))[0];
+      if (!latest) throw new Error(`promoted Git document ${string(row.path)} has no version`);
+      return {
+        id: string(row.id), kind: string(row.document_kind), path: string(row.path),
+        repository: string(row.repository), commit_sha: string(row.commit_sha),
+        content_hash: string(row.content_hash), content: string(latest.content),
+      };
+    })
+    : undefined;
+  const documentCanonicalStates = options.includeAllMutations
+    ? rawDocuments.filter((row) => row.source_kind === 'planning' && row.canonical_read_only_at != null).map((row) => ({
+      document_id: string(row.id), canonical_read_only_at: string(row.canonical_read_only_at),
+      promoted_git_document_id: string(row.promoted_git_document_id),
+    }))
+    : undefined;
+  return sortProjection({
+    items, relations, documents, mutations, claims,
+    ...(promotionAttempts ? { promotion_attempts: promotionAttempts } : {}),
+    ...(promotionGitDocuments ? { promotion_git_documents: promotionGitDocuments } : {}),
+    ...(documentCanonicalStates ? { document_canonical_states: documentCanonicalStates } : {}),
+  });
 }
 
 export function compareProjection(local: PortableCloudProjection, cloud: PortableCloudProjection): CloudProjectionComparison {
   const normalizedLocal = sortProjection(local);
   const normalizedCloud = sortProjection(cloud);
-  const localHash = sha256(stableJson(normalizedLocal));
-  const cloudHash = sha256(stableJson(normalizedCloud));
+  const localHash = sha256(stableJson(portableCore(normalizedLocal)));
+  const cloudHash = sha256(stableJson(portableCore(normalizedCloud)));
   const localById = new Map(normalizedLocal.items.map((item) => [item.id, item]));
   const cloudById = new Map(normalizedCloud.items.map((item) => [item.id, item]));
   return {
@@ -500,11 +535,25 @@ function sortProjection(projection: PortableCloudProjection): PortableCloudProje
     documents: [...projection.documents].sort((a, b) => a.path.localeCompare(b.path)),
     mutations: [...projection.mutations].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.mutation_id.localeCompare(b.mutation_id)),
     claims: [...projection.claims].sort((a, b) => a.item_id.localeCompare(b.item_id)),
+    ...(projection.promotion_attempts ? { promotion_attempts: [...projection.promotion_attempts].sort(jsonRowOrder) } : {}),
+    ...(projection.promotion_git_documents ? { promotion_git_documents: [...projection.promotion_git_documents].sort(jsonRowOrder) } : {}),
+    ...(projection.document_canonical_states ? { document_canonical_states: [...projection.document_canonical_states].sort(jsonRowOrder) } : {}),
   };
 }
 
-function counts(projection: PortableCloudProjection): Record<keyof PortableCloudProjection, number> {
+function counts(projection: PortableCloudProjection): Record<PortableProjectionCollection, number> {
   return { items: projection.items.length, relations: projection.relations.length, documents: projection.documents.length, mutations: projection.mutations.length, claims: projection.claims.length };
+}
+
+function portableCore(projection: PortableCloudProjection): Pick<PortableCloudProjection, PortableProjectionCollection> {
+  return {
+    items: projection.items, relations: projection.relations, documents: projection.documents,
+    mutations: projection.mutations, claims: projection.claims,
+  };
+}
+
+function jsonRowOrder(left: Record<string, JsonValue>, right: Record<string, JsonValue>): number {
+  return stableJson(left).localeCompare(stableJson(right));
 }
 
 function assertRecoveryExport(value: CloudRecoveryExport): void {
