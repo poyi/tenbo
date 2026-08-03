@@ -37,6 +37,7 @@ import { hubHealthRoute } from '../../routes/hubHealth';
 import { hubMutateRoute } from '../../routes/hubMutate';
 import { writeHubLockfile, removeHubLockfile, readHubLockfile, canonicalRepoRoot } from './lockfile';
 import { resolveHubRepoRoot } from './hubRepoRoot';
+import { tenboCommandRoute } from '../../routes/tenboGateway';
 
 /** Default idle-shutdown budget (15 min) — see design doc section 3. */
 const DEFAULT_IDLE_MS = 900_000;
@@ -120,6 +121,7 @@ export async function startHubServer(repoRoot: string, options: HubServerOptions
 
   const health = hubHealthRoute(repoRoot);
   const mutate = hubMutateRoute(repoRoot);
+  const command = tenboCommandRoute(repoRoot, '/api/hub/command');
 
   let lastActivityAt = now();
   const touch = (): void => {
@@ -130,8 +132,10 @@ export async function startHubServer(repoRoot: string, options: HubServerOptions
     if (req.url && req.url.startsWith('/api/hub/')) touch();
     health(req, res, () => {
       mutate(req, res, () => {
-        res.statusCode = 404;
-        res.end();
+        command(req, res, () => {
+          res.statusCode = 404;
+          res.end();
+        });
       });
     });
   });

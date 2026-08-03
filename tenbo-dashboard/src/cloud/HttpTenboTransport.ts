@@ -1,0 +1,100 @@
+import {
+  type CommandEnvelopeDto,
+  type QueryEnvelopeDto,
+  type TenboCommandResult,
+  TenboContractError,
+  type TenboGatewayPort,
+  type TenboQueryResult,
+} from '../contracts/tenbo';
+import { defaultFetch } from './defaultFetch';
+
+export type TenboHttpCredential =
+  | { type: 'agent'; token: string }
+  | { type: 'human'; jwt: string };
+
+export interface HttpTenboTransportOptions {
+  endpoint: string;
+  /** Supabase anon/publishable key. It identifies the Edge project; it is not an authorization credential. */
+  apiKey?: string;
+  credential: TenboHttpCredential | (() => TenboHttpCredential | Promise<TenboHttpCredential>);
+  fetchImpl?: typeof fetch;
+}
+
+type GatewayErrorBody = {
+  error?: { code?: string; message?: string } | string;
+  code?: string;
+  message?: string;
+};
+
+/**
+ * Browser/server-neutral HTTP transport for the Tenbo Edge gateway.
+ *
+ * Supabase headers and gateway error bodies are normalized here. Domain callers
+ * receive only the x-091 DTOs and TenboContractError; no PostgREST/Supabase shape
+ * crosses this boundary.
+ */
+export class HttpTenboTransport implements TenboGatewayPort {
+  private readonly endpoint: string;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly options: HttpTenboTransportOptions) {
+    this.endpoint = options.endpoint.replace(/\/+$/, '');
+    this.fetchImpl = options.fetchImpl ?? defaultFetch;
+  }
+
+  query(request: QueryEnvelopeDto): Promise<TenboQueryResult> {
+    return this.post<TenboQueryResult>(request);
+  }
+
+  command(request: CommandEnvelopeDto): Promise<TenboCommandResult> {
+    return this.post<TenboCommandResult>(request);
+  }
+
+  private async post<T>(body: unknown): Promise<T> {
+    const credential = typeof this.options.credential === 'function'
+      ? await this.options.credential()
+      : this.options.credential;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.options.apiKey) headers.apikey = this.options.apiKey;
+    if (credential.type === 'agent') headers['X-Tenbo-Agent-Token'] = credential.token;
+    else headers.Authorization = `Bearer ${credential.jwt}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      throw new TenboContractError('unsupported', `Tenbo cloud is unavailable: ${messageOf(error)}`);
+    }
+
+    const text = await response.text();
+    let payload: unknown;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      throw new TenboContractError('unsupported', `Tenbo cloud returned non-JSON HTTP ${response.status}`);
+    }
+    if (!response.ok) throw cloudError(response.status, payload);
+    return payload as T;
+  }
+}
+
+export function cloudError(status: number, payload: unknown): TenboContractError {
+  const row = payload && typeof payload === 'object' ? payload as GatewayErrorBody : {};
+  const nested = row.error && typeof row.error === 'object' ? row.error : undefined;
+  const cloudCode = nested?.code ?? row.code ?? (typeof row.error === 'string' ? row.error : undefined);
+  const message = nested?.message ?? row.message ?? `Tenbo cloud request failed with HTTP ${status}`;
+  const code = status === 404 ? 'not_found'
+    : status === 409 ? 'conflict'
+    : status === 401 || status === 403 ? 'permission_denied'
+    : status === 400 || status === 422 || status === 426 ? 'invalid_request'
+    : 'unsupported';
+  return new TenboContractError(code, cloudCode ? `${cloudCode}: ${message}` : message);
+}
+
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

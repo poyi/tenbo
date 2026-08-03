@@ -1,0 +1,158 @@
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import type { ActorDto, ContextResultDto, GitDocumentDto, JsonValue, TenboBackendPorts } from '../contracts/tenbo';
+
+export interface ExactCommitGitDocument {
+  repository: string;
+  commit_sha: string;
+  path: string;
+  document_kind: string;
+  content_hash: string;
+  content: string;
+}
+
+export interface DirtyGitDocumentOverlay extends ExactCommitGitDocument {
+  source_kind: 'local_overlay';
+  persisted: false;
+  base_content_hash: string;
+  deleted?: boolean;
+}
+
+export function readExactCommitGitDocument(
+  repoRoot: string,
+  commitSha: string,
+  documentPath: string,
+  expectedRepository?: string,
+): ExactCommitGitDocument {
+  const normalizedPath = normalizeGitPath(documentPath);
+  if (!/^[0-9a-f]{40,64}$/i.test(commitSha)) throw new Error('commit must be a full hexadecimal commit SHA');
+  const resolvedCommit = gitText(repoRoot, ['rev-parse', '--verify', `${commitSha}^{commit}`]).trim().toLowerCase();
+  if (resolvedCommit !== commitSha.toLowerCase()) throw new Error(`commit ${commitSha} did not resolve exactly`);
+  const repository = gitText(repoRoot, ['config', '--get', 'remote.origin.url']).trim();
+  if (!repository) throw new Error('Git remote.origin.url is required for trusted ingestion');
+  if (expectedRepository && canonicalRepository(repository) !== canonicalRepository(expectedRepository)) {
+    throw new Error(`local Git origin does not match destination project repository (${repository} != ${expectedRepository})`);
+  }
+  const bytes = gitBytes(repoRoot, ['show', `${resolvedCommit}:${normalizedPath}`]);
+  const content = bytes.toString('utf8');
+  if (!Buffer.from(content, 'utf8').equals(bytes)) throw new Error(`${normalizedPath} is not canonical UTF-8 text`);
+  return {
+    repository: expectedRepository ?? repository,
+    commit_sha: resolvedCommit,
+    path: normalizedPath,
+    document_kind: documentKind(normalizedPath),
+    content_hash: sha256(bytes),
+    content,
+  };
+}
+
+/**
+ * The only ingestion helper exposed to CLI migration code. Content is always
+ * obtained via `git show <full-sha>:<path>`; no content parameter exists.
+ */
+export async function ingestExactCommitGitDocument(
+  ports: TenboBackendPorts,
+  repoRoot: string,
+  commitSha: string,
+  documentPath: string,
+  actor: ActorDto,
+): Promise<GitDocumentDto> {
+  const destination = await ports.project.exportProject();
+  const repository = exportedRepository(destination);
+  const document = readExactCommitGitDocument(repoRoot, commitSha, documentPath, repository);
+  const result = await ports.gitDocuments.execute({ kind: 'ingestGitDocument', ...document }, actor);
+  if (result.kind !== 'gitDocument') throw new Error(`expected gitDocument result, received ${result.kind}`);
+  if (result.value.content_hash !== document.content_hash) throw new Error('cloud returned a different Git document hash');
+  return result.value;
+}
+
+export function dirtyGitDocumentOverlay(
+  repoRoot: string,
+  commitSha: string,
+  documentPath: string,
+  expectedRepository?: string,
+): DirtyGitDocumentOverlay | null {
+  const base = readExactCommitGitDocument(repoRoot, commitSha, documentPath, expectedRepository);
+  const status = gitText(repoRoot, ['status', '--porcelain=v1', '--', base.path]);
+  if (!status.trim()) return null;
+  const absolute = path.resolve(repoRoot, ...base.path.split('/'));
+  const relative = path.relative(path.resolve(repoRoot), absolute);
+  if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('dirty overlay path escaped repository');
+  const deleted = !existsSync(absolute);
+  const bytes = deleted ? Buffer.alloc(0) : readFileSync(absolute);
+  const content = bytes.toString('utf8');
+  if (!Buffer.from(content, 'utf8').equals(bytes)) throw new Error(`${base.path} overlay is not canonical UTF-8 text`);
+  return {
+    ...base,
+    source_kind: 'local_overlay',
+    persisted: false,
+    base_content_hash: base.content_hash,
+    content_hash: sha256(bytes),
+    content,
+    ...(deleted ? { deleted: true } : {}),
+  };
+}
+
+/** Overlay dirty Git-owned context at the CLI boundary without issuing a cloud mutation. */
+export function overlayDirtyGitContext(repoRoot: string, result: ContextResultDto): ContextResultDto {
+  return { ...result, payload: overlayValue(repoRoot, structuredClone(result.payload)) };
+}
+
+function overlayValue(repoRoot: string, value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map((entry) => overlayValue(repoRoot, entry));
+  if (!value || typeof value !== 'object') return value;
+  const row = value as Record<string, JsonValue>;
+  if (row.source_kind === 'git' && typeof row.repository === 'string' && typeof row.commit_sha === 'string' && typeof row.path === 'string') {
+    const overlay = dirtyGitDocumentOverlay(repoRoot, row.commit_sha, row.path, row.repository);
+    if (overlay) return overlay as unknown as JsonValue;
+  }
+  return Object.fromEntries(Object.entries(row).map(([key, child]) => [key, overlayValue(repoRoot, child)]));
+}
+
+function exportedRepository(value: JsonValue): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('cloud export did not include project metadata');
+  const project = value.project;
+  if (!project || typeof project !== 'object' || Array.isArray(project) || typeof project.repository !== 'string') {
+    throw new Error('cloud export did not include project.repository');
+  }
+  return project.repository;
+}
+
+function normalizeGitPath(value: string): string {
+  if (!value || value.includes('\\') || path.posix.isAbsolute(value)) throw new Error('Git document path must be repository-relative');
+  const normalized = path.posix.normalize(value);
+  if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) throw new Error('Git document path escaped repository');
+  return normalized;
+}
+
+function documentKind(documentPath: string): string {
+  const basename = path.posix.basename(documentPath, path.posix.extname(documentPath));
+  if (documentPath === '.tenbo/overview.md') return 'overview';
+  if (documentPath === '.tenbo/principles.md') return 'principles';
+  if (basename === 'intent') return 'layer-intent';
+  if (basename === 'code-map') return 'code-map';
+  return basename || 'documentation';
+}
+
+function canonicalRepository(value: string): string {
+  return value.trim().replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '').replace(/\/$/, '').toLowerCase();
+}
+
+function gitText(repoRoot: string, args: string[]): string {
+  return gitBytes(repoRoot, args).toString('utf8');
+}
+
+function gitBytes(repoRoot: string, args: string[]): Buffer {
+  try {
+    return execFileSync('git', args, { cwd: repoRoot, encoding: 'buffer', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    const stderr = error && typeof error === 'object' && 'stderr' in error ? String(error.stderr).trim() : String(error);
+    throw new Error(`git ${args[0]} failed: ${stderr}`);
+  }
+}
+
+function sha256(value: Buffer | string): string {
+  return createHash('sha256').update(value).digest('hex');
+}

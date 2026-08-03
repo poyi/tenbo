@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { parse as parseYamlText } from 'yaml';
-import { readLayerContent, readState } from './tenboFs';
+import { readActiveState, readActiveValidationState, readLayerContent } from './tenboFs';
 import { comparePriority } from './priority';
 import { checkSourceIndexFreshness, readSourceIndex } from './sourceIndex/store';
 import { querySourceIndex, type SourceEvidenceFile } from './sourceIndex/query';
@@ -13,6 +13,7 @@ import { isLayerCodeMapStale } from './codeMapGenerator';
 import { readPendingReconciliation } from './reconciliationFlag';
 import type { Item, Layer, Scope, Status, TenboState } from '../../types';
 import type { SourceIndex } from './sourceIndex/types';
+import type { ContextBoundsDto } from '../../contracts/tenbo';
 
 export type ContextIntent = 'session' | 'feature' | 'item';
 export type ContextConfidence = 'high' | 'medium' | 'low';
@@ -117,6 +118,7 @@ export interface FeatureContextBundle {
     verification_plan: ContextVerificationEntry[];
   };
   warnings: ContextWarning[];
+  bounds: ContextBoundsDto;
 }
 
 interface ResolveOptions {
@@ -228,6 +230,7 @@ export interface SessionContextBundle {
    */
   doc_staleness: ContextDocStaleness;
   warnings: ContextWarning[];
+  bounds: ContextBoundsDto;
 }
 
 export interface ContextLayerConstraints {
@@ -268,6 +271,7 @@ export interface ItemContextBundle {
   };
   workpad: ContextWorkpadResult;
   warnings: ContextWarning[];
+  bounds: ContextBoundsDto;
 }
 
 interface Goal {
@@ -320,6 +324,34 @@ const STOP_WORDS = new Set([
 const ACTIVE_STATUSES: readonly Status[] = ['now'];
 const NEXT_STATUSES: readonly Status[] = ['now', 'next'];
 
+const FEATURE_LIMITS = { rows: 32, bytes: 64 * 1024, tokens: 4_000 } as const;
+const ITEM_SESSION_LIMITS = { rows: 16, bytes: 24 * 1024, tokens: 1_500 } as const;
+
+function clipped(text: string, max = 320): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+function contextBounds(value: unknown, rowCount: number, limits: ContextBoundsDto['limits'], truncated = false): ContextBoundsDto {
+  const byteCount = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  const tokenEstimate = Math.ceil(byteCount / 4);
+  const reason = rowCount >= limits.rows
+    ? 'rows'
+    : byteCount >= limits.bytes
+      ? 'bytes'
+      : tokenEstimate >= limits.tokens
+        ? 'tokens'
+        : undefined;
+  return {
+    row_count: rowCount,
+    byte_count: byteCount,
+    token_estimate: tokenEstimate,
+    estimator: 'tenbo-token-estimator-v1',
+    limits: { ...limits },
+    truncated: truncated || Boolean(reason),
+    ...(reason ? { truncation_reason: reason } : {}),
+  };
+}
+
 function tenboDir(repoRoot: string): string {
   return path.join(repoRoot, '.tenbo');
 }
@@ -353,7 +385,7 @@ function parseGoals(overviewMd: string): Goal[] {
   const section = overviewMd.match(/## Product goals\s+([\s\S]*?)(?:\n## |\s*$)/i)?.[1] ?? '';
   for (const line of section.split(/\r?\n/)) {
     const match = line.match(/^\s*-\s+\*\*(g\d+)\*\*:\s*(.+)$/i);
-    if (match) goals.push({ id: match[1], text: match[2].trim() });
+    if (match && goals.length < 8) goals.push({ id: match[1], text: clipped(match[2].trim()) });
   }
   return goals;
 }
@@ -363,7 +395,9 @@ function parseNonGoals(overviewMd: string): string[] {
   return section
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*-\s*/, '').trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((entry) => clipped(entry));
 }
 
 function itemText(item: Item): string {
@@ -379,8 +413,11 @@ function itemText(item: Item): string {
   ].filter(Boolean).join(' ');
 }
 
-function layerText(repoRoot: string, scope: Scope, layer: Layer): string {
-  const content = readLayerContent(repoRoot, scope.id, layer.id);
+function layerText(scope: Scope, layer: Layer): string {
+  // First-pass routing uses only lightweight architecture metadata. Reading
+  // every layer narrative/intent/code-map made an unrelated document part of
+  // every feature query; selected layer documents are returned as paths and
+  // loaded only when the caller follows the bounded read plan.
   return [
     scope.id,
     scope.path,
@@ -389,9 +426,6 @@ function layerText(repoRoot: string, scope: Scope, layer: Layer): string {
     layer.name,
     layer.description,
     ...(layer.files ?? []),
-    content.readme,
-    content.intentMd,
-    content.codeMapMd,
   ].join(' ');
 }
 
@@ -417,14 +451,14 @@ function itemBoostForLayer(scope: Scope, layer: Layer, matchingItems: ScoredItem
   return boost;
 }
 
-function scoreLayers(repoRoot: string, queryTokens: Set<string>, scopes: Scope[], matchingItems: ScoredItemEntry[]): ScoredLayer[] {
+function scoreLayers(queryTokens: Set<string>, scopes: Scope[], matchingItems: ScoredItemEntry[]): ScoredLayer[] {
   const scored: ScoredLayer[] = [];
   for (const scope of scopes) {
     for (const layer of scope.layers) {
       scored.push({
         scope,
         layer,
-        score: overlapScore(queryTokens, layerText(repoRoot, scope, layer)) + itemBoostForLayer(scope, layer, matchingItems),
+        score: overlapScore(queryTokens, layerText(scope, layer)) + itemBoostForLayer(scope, layer, matchingItems),
       });
     }
   }
@@ -447,16 +481,20 @@ function summarizeItem(item: Item, detail: 'brief' | 'execution'): ContextItemSu
     id: item.id,
     title: item.title,
     status: item.status,
-    description: item.description,
+    description: clipped(item.description),
     ...(item.layer ? { layer: item.layer } : {}),
     ...(item.layers ? { layers: item.layers } : {}),
     ...(item.affects ? { affects: item.affects } : {}),
     ...(item.type ? { type: item.type } : {}),
     ...(item.priority ? { priority: item.priority } : {}),
     ...(item.goal_ref ? { goal_ref: item.goal_ref } : {}),
-    ...(item.files_to_read ? { files_to_read: item.files_to_read } : {}),
-    ...(detail === 'execution' && item.done_when ? { done_when: item.done_when } : {}),
-    ...(detail === 'execution' && item.risks ? { risks: item.risks } : {}),
+    ...(item.files_to_read ? { files_to_read: item.files_to_read.slice(0, 8).map((entry) => clipped(entry)) } : {}),
+    ...(detail === 'execution' && item.done_when ? {
+      done_when: item.done_when.slice(0, 3).map((entry) => typeof entry === 'string'
+        ? clipped(entry)
+        : { ...entry, text: clipped(entry.text), check: { ...entry.check, run: clipped(entry.check.run, 512) } }),
+    } : {}),
+    ...(detail === 'execution' && item.risks ? { risks: item.risks.slice(0, 3).map((entry) => clipped(entry)) } : {}),
   };
 }
 
@@ -639,7 +677,7 @@ function sourceIndexWarning(freshness: ReturnType<typeof checkSourceIndexFreshne
 
 export function resolveFeatureContext(repoRoot: string, query: string, opts: ResolveOptions = {}): FeatureContextBundle {
   const now = opts.now ?? new Date();
-  const state = readState(repoRoot);
+  const state = readActiveState(repoRoot);
   const queryTokens = tokenize(query);
   const goals = parseGoals(state.workspaceContent.overviewMd);
   const nonGoals = parseNonGoals(state.workspaceContent.overviewMd);
@@ -650,7 +688,7 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
     : null;
   const matchingItems = scoreItems(queryTokens, state.scopes);
   const scoredLayers = withSourceLayerScores(
-    scoreLayers(repoRoot, queryTokens, state.scopes, matchingItems),
+    scoreLayers(queryTokens, state.scopes, matchingItems),
     sourceQuery?.layerScores ?? new Map(),
   );
   const candidates = withSourceScopeScores(
@@ -672,8 +710,8 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
       .slice(0, 3)
       .map((entry) => entry.layer.id)
     : [];
-  const activeItems = selectedScope ? roadmapEntriesForScope(selectedScope, ACTIVE_STATUSES) : [];
-  const nextItems = selectedScope ? roadmapEntriesForScope(selectedScope, NEXT_STATUSES) : [];
+  const activeItems = selectedScope ? roadmapEntriesForScope(selectedScope, ACTIVE_STATUSES).slice(0, 8) : [];
+  const nextItems = selectedScope ? roadmapEntriesForScope(selectedScope, NEXT_STATUSES).slice(0, 12) : [];
   const goalRefs = unique([
     ...activeItems.flatMap((entry) => goalRefsForItem(entry.item)),
     ...matchingItems.flatMap((entry) => goalRefsForItem(entry.item)),
@@ -697,7 +735,7 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
     ...layerFiles,
     ...activeItems.flatMap((entry) => entry.item.files_to_read ?? []),
     ...matchingItems.flatMap((entry) => entry.item.files_to_read ?? []),
-  ]);
+  ]).slice(0, 12);
   const sourceEvidence = (sourceQuery?.files ?? [])
     .filter((entry) => !selectedScope || entry.scope === selectedScope.id)
     .filter((entry) => selectedLayers.length === 0 || entry.layers.some((layer) => selectedLayers.includes(layer)));
@@ -710,10 +748,10 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
   });
   const sourceWarning = sourceIndexWarning(sourceFreshness);
 
-  return {
+  const bundle: Omit<FeatureContextBundle, 'bounds'> = {
     ok: true,
     intent: 'feature',
-    query,
+    query: clipped(query, 1_000),
     product: { goals, non_goals: nonGoals },
     recommendation: {
       confidence,
@@ -732,7 +770,7 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
     },
     roadmap: {
       active_items: activeItems.map((entry) => publicItemEntry(entry, 'execution')),
-      matching_items: matchingItems.slice(0, 5).map((entry) => publicItemEntry(entry, 'brief')),
+      matching_items: matchingItems.slice(0, 8).map((entry) => publicItemEntry(entry, 'brief')),
       next_items: nextItems.map((entry) => publicItemEntry(entry, 'execution')),
     },
     context: {
@@ -746,6 +784,22 @@ export function resolveFeatureContext(repoRoot: string, query: string, opts: Res
       ...(sourceWarning ? [sourceWarning] : []),
     ],
   };
+  let truncated = matchingItems.length > 8;
+  const maxBudgetBytes = Math.min(FEATURE_LIMITS.bytes, FEATURE_LIMITS.tokens * 4);
+  while (new TextEncoder().encode(JSON.stringify(bundle)).byteLength > maxBudgetBytes) {
+    const removable = bundle.roadmap.next_items.length > 0
+      ? bundle.roadmap.next_items
+      : bundle.roadmap.matching_items.length > 1
+        ? bundle.roadmap.matching_items
+        : bundle.roadmap.active_items.length > 1
+          ? bundle.roadmap.active_items
+          : null;
+    if (!removable) break;
+    removable.pop();
+    truncated = true;
+  }
+  const itemRows = bundle.roadmap.active_items.length + bundle.roadmap.matching_items.length + bundle.roadmap.next_items.length;
+  return { ...bundle, bounds: contextBounds(bundle, itemRows, FEATURE_LIMITS, truncated) };
 }
 
 // ---------------------------------------------------------------------------
@@ -925,10 +979,10 @@ function layerConstraintsFor(repoRoot: string, scopeId: string, layerId: string)
   return {
     scope: scopeId,
     layer: layerId,
-    optimizing_for: parseOptimizingFor(content.intentMd),
-    anti_responsibilities: parseBulletSection(content.intentMd, 'Anti-responsibilities'),
-    boundaries: parseBulletSection(content.intentMd, 'Boundaries'),
-    invariants: parseBulletSection(content.intentMd, 'Invariants'),
+    optimizing_for: parseOptimizingFor(content.intentMd).slice(0, 4).map((entry) => clipped(entry)),
+    anti_responsibilities: parseBulletSection(content.intentMd, 'Anti-responsibilities').slice(0, 4).map((entry) => clipped(entry)),
+    boundaries: parseBulletSection(content.intentMd, 'Boundaries').slice(0, 4).map((entry) => clipped(entry)),
+    invariants: parseBulletSection(content.intentMd, 'Invariants').slice(0, 4).map((entry) => clipped(entry)),
   };
 }
 
@@ -970,7 +1024,7 @@ function pendingReconciliationSummary(repoRoot: string): ContextPendingReconcili
  * not an identity-diff (see `validate-cli.ts`'s `computeDiff` for that) — cheap and
  * sufficient for a session briefing. Omitted when no prior snapshot exists.
  */
-function validationDeltaSummary(repoRoot: string, state: TenboState): ContextValidationDelta | undefined {
+function validationDeltaSummary(repoRoot: string, _state: TenboState): ContextValidationDelta | undefined {
   const abs = path.join(repoRoot, '.tenbo', '.validation-status.json');
   if (!existsSync(abs)) return undefined;
   let prev: { generated_at?: string; errors?: unknown[]; warnings?: unknown[] } | null = null;
@@ -982,7 +1036,7 @@ function validationDeltaSummary(repoRoot: string, state: TenboState): ContextVal
   if (!prev) return undefined;
   const previousErrors = Array.isArray(prev.errors) ? prev.errors.length : 0;
   const previousWarnings = Array.isArray(prev.warnings) ? prev.warnings.length : 0;
-  const result = validate(state);
+  const result = validate(readActiveValidationState(repoRoot));
   return {
     generated_at: prev.generated_at ?? '',
     previous_errors: previousErrors,
@@ -1066,7 +1120,7 @@ function docStalenessSummary(
  */
 export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {}): SessionContextBundle {
   const now = opts.now ?? new Date();
-  const state = readState(repoRoot);
+  const state = readActiveState(repoRoot);
   const { staleNowDays, staleNextDays } = readThresholds(state.workspaceContent.principlesMd);
   const entries = allItemEntries(state);
 
@@ -1104,7 +1158,7 @@ export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {
   const staleNext: ContextStaleItemRef[] = nextEntries
     .filter((entry): entry is typeof entry & { activity: Date } => entry.activity !== null && daysSince(entry.activity, now) > staleNextDays)
     .sort((a, b) => daysSince(b.activity, now) - daysSince(a.activity, now))
-    .slice(0, SESSION_LIST_CAP)
+    .slice(0, 8)
     .map((entry) => ({
       id: entry.item.id,
       scope: entry.scope,
@@ -1117,7 +1171,7 @@ export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {
   const validationDelta = validationDeltaSummary(repoRoot, state);
   const observations = recentObservationsList(repoRoot, now);
 
-  const workpadResume: ContextWorkpadResumeCandidate[] = entries
+  const workpadResumeCandidates: ContextWorkpadResumeCandidate[] = entries
     .filter((entry) => entry.item.workpad)
     .map((entry) => ({ entry, workpad: readWorkpadState(repoRoot, entry.item.workpad as string) }))
     .filter((row): row is { entry: typeof entries[number]; workpad: ContextWorkpadState } =>
@@ -1131,16 +1185,31 @@ export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {
       unchecked_plan_items: workpad.plan.total - workpad.plan.checked,
     }));
 
+  // Keep the union of referenced roadmap items within the item/session cap.
+  const boundedIds = new Set(nowItems.map((entry) => entry.id));
+  const boundedStaleNext = staleNext.filter((entry) => {
+    if (boundedIds.has(entry.id)) return true;
+    if (boundedIds.size >= ITEM_SESSION_LIMITS.rows) return false;
+    boundedIds.add(entry.id);
+    return true;
+  });
+  const workpadResume = workpadResumeCandidates.filter((entry) => {
+    if (boundedIds.has(entry.item_id)) return true;
+    if (boundedIds.size >= ITEM_SESSION_LIMITS.rows) return false;
+    boundedIds.add(entry.item_id);
+    return true;
+  });
+
   const sourceIndex = readSourceIndex(repoRoot);
   const sourceFreshness = checkSourceIndexFreshness(repoRoot, sourceIndex);
   const sourceWarning = sourceIndexWarning(sourceFreshness);
   const docStaleness = docStalenessSummary(repoRoot, state, sourceFreshness, sourceIndex);
 
-  return {
+  const bundle: Omit<SessionContextBundle, 'bounds'> = {
     ok: true,
     intent: 'session',
     now: { count: nowEntries.length, items: nowItems },
-    stale: { now: staleNow, next: staleNext },
+    stale: { now: staleNow, next: boundedStaleNext },
     pending_reconciliation: pendingReconciliation,
     ...(validationDelta ? { validation_delta: validationDelta } : {}),
     ...(workpadResume.length > 0 ? { workpad_resume: workpadResume } : {}),
@@ -1150,6 +1219,10 @@ export function resolveSessionContext(repoRoot: string, opts: ResolveOptions = {
       ...agentContextWarnings(repoRoot, now),
       ...(sourceWarning ? [sourceWarning] : []),
     ],
+  };
+  return {
+    ...bundle,
+    bounds: contextBounds(bundle, boundedIds.size, ITEM_SESSION_LIMITS, nowEntries.length > nowItems.length || boundedStaleNext.length < staleNext.length),
   };
 }
 
@@ -1174,7 +1247,7 @@ export function resolveItemContext(repoRoot: string, itemId: string, opts: Resol
     .map(({ scopeId, layerId }) => layerConstraintsFor(repoRoot, scopeId, layerId))
     .filter((entry): entry is ContextLayerConstraints => entry !== null);
 
-  const filesToRead = item.files_to_read ?? [];
+  const filesToRead = (item.files_to_read ?? []).slice(0, 12);
   const readPlan = buildReadPlan({
     layerDocs,
     activeItems: [{ scope: located.scopeId, item, score: 0 }],
@@ -1186,7 +1259,7 @@ export function resolveItemContext(repoRoot: string, itemId: string, opts: Resol
   const sourceFreshness = checkSourceIndexFreshness(repoRoot, readSourceIndex(repoRoot));
   const sourceWarning = sourceIndexWarning(sourceFreshness);
 
-  return {
+  const bundle: Omit<ItemContextBundle, 'bounds'> = {
     ok: true,
     intent: 'item',
     item_id: item.id,
@@ -1205,4 +1278,5 @@ export function resolveItemContext(repoRoot: string, itemId: string, opts: Resol
       ...(sourceWarning ? [sourceWarning] : []),
     ],
   };
+  return { ...bundle, bounds: contextBounds(bundle, 1, ITEM_SESSION_LIMITS, (item.files_to_read?.length ?? 0) > filesToRead.length) };
 }

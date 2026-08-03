@@ -2,6 +2,9 @@ import { listItems, type ListItemFilters } from '../src/api/lib/roadmapStore';
 import { parseItemFields, projectItem, summarizeItem } from '../src/api/lib/itemProjection';
 import { hasFlag, readOption } from './cliArgs';
 import { handleCliError, isMain, misuse, ok, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { loadCloudConfig } from '../src/cloud/cloudConfig';
+import { CliTenboClient } from '../src/clients/CliTenboClient';
+import { fetchAllCloudItems } from '../src/clients/cliCloudQueries';
 
 const STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
 const USAGE = `Usage: tenbo-dashboard items [--status <status[,status]>] [--verification <status>] [--goal <goal>] [--type <type>] [--priority <p0|p1|p2|p3>] [--layer <id>] [--fields <a,b>] [--summary] [--json]
@@ -17,6 +20,12 @@ function readStatusFilter(value: string | undefined): ListItemFilters['status'] 
 }
 
 export function runItemsCli(repoRoot: string, args: string[]): CliResult {
+  const cloud = loadCloudConfig({ repoRoot, optional: true });
+  if (cloud) return runCloudItemsCli(repoRoot, args, cloud) as unknown as CliResult;
+  return runLocalItemsCli(repoRoot, args);
+}
+
+function runLocalItemsCli(repoRoot: string, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
   const summary = hasFlag(args, '--summary');
   const fieldsArg = readOption(args, '--fields');
@@ -48,11 +57,34 @@ export function runItemsCli(repoRoot: string, args: string[]): CliResult {
   }
 }
 
+async function runCloudItemsCli(repoRoot: string, args: string[], cloud: NonNullable<ReturnType<typeof loadCloudConfig>>): Promise<CliResult> {
+  const json = hasFlag(args, '--json');
+  const summary = hasFlag(args, '--summary');
+  const fieldsArg = readOption(args, '--fields');
+  try {
+    const filters: ListItemFilters = {
+      status: readStatusFilter(readOption(args, '--status')), verification: readOption(args, '--verification') as ListItemFilters['verification'],
+      goal: readOption(args, '--goal'), type: readOption(args, '--type') as ListItemFilters['type'],
+      priority: readOption(args, '--priority') as ListItemFilters['priority'], layer: readOption(args, '--layer'),
+    };
+    const items = await fetchAllCloudItems(new CliTenboClient(repoRoot, { cloudConfig: cloud }), 'listItems', filters);
+    if (fieldsArg) {
+      const fields = parseItemFields(fieldsArg); const projected = items.map((entry) => projectItem(entry, fields));
+      return serialize({ ok: true, items: projected }, json, `${projected.map((entry) => `${entry.id} ${entry.status} ${entry.title}`).join('\n')}${projected.length ? '\n' : ''}`);
+    }
+    if (summary) {
+      const projected = items.map((entry) => summarizeItem(entry));
+      return serialize({ ok: true, items: projected }, json, `${projected.map((entry) => `${entry.id} ${entry.status} ${entry.title}`).join('\n')}${projected.length ? '\n' : ''}`);
+    }
+    return serialize({ ok: true, items }, json, `${items.map((entry) => `${entry.item.id} ${entry.item.status} ${entry.item.title}`).join('\n')}${items.length ? '\n' : ''}`);
+  } catch (err) { return handleCliError(err, json); }
+}
+
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
     runMain(ok(USAGE));
   } else {
-    runMain(runItemsCli(repoRootFromCwd(), args));
+    runMain(await runItemsCli(repoRootFromCwd(), args));
   }
 }

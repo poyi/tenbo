@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeDiff, renderOutput, issueKey } from './validate-cli';
-import type { ValidateIssue } from '../src/types';
+import { computeDiff, mergeCloudItemsIntoState, renderOutput, issueKey } from './validate-cli';
+import type { TenboState, ValidateIssue } from '../src/types';
 
 const warn = (msg: string, scope = 'editor', itemId?: string): ValidateIssue => ({
   level: 'warning',
@@ -29,6 +29,22 @@ describe('issueKey', () => {
   });
   it('distinguishes different itemIds with the same message', () => {
     expect(issueKey(warn('x', 'editor', 'ed-001'))).not.toBe(issueKey(warn('x', 'editor', 'ed-002')));
+  });
+});
+
+describe('mergeCloudItemsIntoState', () => {
+  it('routes active, archived, and cross-cutting cloud records without roadmap files', () => {
+    const state: TenboState = {
+      scopes: [{ id: 'editor', path: 'scopes/editor', description: 'Editor', layers: [], items: [], archivedItems: [] }],
+      crossCutting: [], narratives: {},
+      workspaceContent: { overviewMd: '', principlesMd: '', glossaryMd: '', observationsMd: '', overviewMtime: null, principlesMtime: null, glossaryMtime: null, observationsMtime: null },
+      crossCuttingRoadmap: [],
+    };
+    const item = (id: string) => ({ scopeId: id.startsWith('x-') ? 'cross-cutting' : 'editor', filePath: '', archived: false, item: { id, title: id, status: 'now' as const, description: id } });
+    expect(mergeCloudItemsIntoState(state, [item('ed-001'), item('x-001')], [{ ...item('ed-002'), archived: true }])).toEqual([]);
+    expect(state.scopes[0].items.map((entry) => entry.id)).toEqual(['ed-001']);
+    expect(state.scopes[0].archivedItems?.map((entry) => entry.id)).toEqual(['ed-002']);
+    expect(state.crossCuttingRoadmap?.map((entry) => entry.id)).toEqual(['x-001']);
   });
 });
 

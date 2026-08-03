@@ -13,6 +13,7 @@ import { refreshMetricsRoute } from './routes/refreshMetrics';
 import { hubHealthRoute } from './routes/hubHealth';
 import { hubMutateRoute } from './routes/hubMutate';
 import { writeHubLockfile, removeHubLockfile } from './lib/hub/lockfile';
+import { tenboCommandRoute, tenboQueryRoute } from './routes/tenboGateway';
 
 export function tenboApiPlugin(): Plugin {
   return {
@@ -24,6 +25,8 @@ export function tenboApiPlugin(): Plugin {
         return;
       }
       server.middlewares.use(stateRoute(repoRoot));
+      server.middlewares.use(tenboQueryRoute(repoRoot));
+      server.middlewares.use(tenboCommandRoute(repoRoot));
       server.middlewares.use(itemsRoute(repoRoot));
       server.middlewares.use(reorderRoute(repoRoot));
       server.middlewares.use(relatedRoute(repoRoot));
@@ -43,6 +46,7 @@ export function tenboApiPlugin(): Plugin {
       // is treated as absent by discoverHub's liveness check either way).
       server.middlewares.use(hubHealthRoute(repoRoot));
       server.middlewares.use(hubMutateRoute(repoRoot));
+      server.middlewares.use(tenboCommandRoute(repoRoot, '/api/hub/command'));
       const httpServer = server.httpServer;
       if (httpServer) {
         httpServer.once('listening', () => {

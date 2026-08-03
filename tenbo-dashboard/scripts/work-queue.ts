@@ -3,6 +3,9 @@ import { summarizeItem } from '../src/api/lib/itemProjection';
 import { comparePriority } from '../src/api/lib/priority';
 import { hasFlag, readOption } from './cliArgs';
 import { handleCliError, isMain, misuse, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { loadCloudConfig } from '../src/cloud/cloudConfig';
+import { CliTenboClient } from '../src/clients/CliTenboClient';
+import { fetchAllCloudItems } from '../src/clients/cliCloudQueries';
 
 const STATUSES = new Set(['now', 'next', 'later', 'done', 'dropped']);
 
@@ -20,6 +23,22 @@ function statusRank(status: string): number {
 }
 
 export function runWorkQueueCli(repoRoot: string, args: string[]): CliResult {
+  const cloud = loadCloudConfig({ repoRoot, optional: true });
+  if (cloud) return runCloudWorkQueueCli(repoRoot, args, cloud) as unknown as CliResult;
+  return runWorkQueueWith(repoRoot, args);
+}
+
+function renderWorkQueue(located: ReturnType<typeof listItems>, args: string[]): CliResult {
+  const json = hasFlag(args, '--json');
+  const items = located
+    .sort((a, b) => statusRank(a.item.status) - statusRank(b.item.status) || comparePriority(a.item, b.item) || a.item.id.localeCompare(b.item.id))
+    .map((entry) => summarizeItem(entry));
+  const payload = { ok: true, recommended_sequence: items.map((item) => item.id), blockers: [], items,
+    verification: items.map((item) => ({ id: item.id, commands: [`tenbo-dashboard item brief ${item.id} --json`, `tenbo-dashboard item verify ${item.id} --check --json`] })) };
+  return serialize(payload, json, `${items.map((item) => `${item.id} ${item.status} ${item.title}`).join('\n')}${items.length ? '\n' : ''}`);
+}
+
+function runWorkQueueWith(repoRoot: string, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
   try {
     const filters: ListItemFilters = {
@@ -30,23 +49,20 @@ export function runWorkQueueCli(repoRoot: string, args: string[]): CliResult {
       verification: readOption(args, '--verification') as ListItemFilters['verification'],
       goal: readOption(args, '--goal'),
     };
-    const located = listItems(repoRoot, filters)
-      .sort((a, b) => statusRank(a.item.status) - statusRank(b.item.status) || comparePriority(a.item, b.item) || a.item.id.localeCompare(b.item.id));
-    const items = located.map((entry) => summarizeItem(entry));
-    const payload = {
-      ok: true,
-      recommended_sequence: items.map((item) => item.id),
-      blockers: [],
-      items,
-      verification: items.map((item) => ({
-        id: item.id,
-        commands: [
-          `tenbo-dashboard item brief ${item.id} --json`,
-          `tenbo-dashboard item verify ${item.id} --check --json`,
-        ],
-      })),
-    };
-    return serialize(payload, json, `${items.map((item) => `${item.id} ${item.status} ${item.title}`).join('\n')}${items.length ? '\n' : ''}`);
+    return renderWorkQueue(listItems(repoRoot, filters), args);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('invalid status:')) return misuse(err.message, json);
+    return handleCliError(err, json);
+  }
+}
+
+async function runCloudWorkQueueCli(repoRoot: string, args: string[], cloud: NonNullable<ReturnType<typeof loadCloudConfig>>): Promise<CliResult> {
+  const json = hasFlag(args, '--json');
+  try {
+    const filters: ListItemFilters = { status: readStatusFilter(readOption(args, '--status')), type: readOption(args, '--type') as ListItemFilters['type'],
+      priority: readOption(args, '--priority') as ListItemFilters['priority'], layer: readOption(args, '--layer'),
+      verification: readOption(args, '--verification') as ListItemFilters['verification'], goal: readOption(args, '--goal') };
+    return renderWorkQueue(await fetchAllCloudItems(new CliTenboClient(repoRoot, { cloudConfig: cloud }), 'listItems', filters), args);
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('invalid status:')) return misuse(err.message, json);
     return handleCliError(err, json);
@@ -54,5 +70,5 @@ export function runWorkQueueCli(repoRoot: string, args: string[]): CliResult {
 }
 
 if (isMain(import.meta.url)) {
-  runMain(runWorkQueueCli(repoRootFromCwd(), process.argv.slice(2)));
+  runMain(await runWorkQueueCli(repoRootFromCwd(), process.argv.slice(2)));
 }

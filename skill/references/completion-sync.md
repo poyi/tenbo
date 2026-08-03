@@ -58,17 +58,17 @@ summary. Judgment calls use the universal prompting rule.
    On failure: surface the specific rule, fix or seek user input, re-run the bar.
    On override: user must explicitly invoke; record `bar_override: <reason>` on the row.
 8. **Mark done.** Prefer `npx tenbo-dashboard item set-status <item-id> done` over
-   hand-editing roadmap YAML. Archive spec if `links:` points into `.tenbo/specs/`.
-   Archive workpad to `.tenbo/workpads/archive/<item-id>.md` if present.
+   hand-editing storage. Archive linked planning documents with
+   `item document-archive <document-id>`; never move spec/workpad files directly.
    Phased: mark only the matching phase; archive spec/workpad when all phases done.
-9. **Auto-archive check.** After marking done, count `done` + `dropped` items in
-   the scope's `roadmap.yaml`. If the count exceeds 20 (configurable threshold):
+9. **Auto-archive check (local projects only).** After marking done, query the
+   scope's `done` + `dropped` count. If it exceeds 20 (configurable threshold):
    run `npx tenbo-dashboard archive --scope <scope-id>`. This moves items with
    `doc_update` dates >30 days old to `roadmap-archive.yaml`, keeping the active
    roadmap lean. Log: *"Archived N items from <scope>."* Skip silently if count
    is below threshold or no items qualify.
-10. **Dependent sweep.** Scan all `roadmap.yaml` files (this scope + cross-scope
-   `.tenbo/roadmap.yaml`) for items that may now be redundant given this one
+10. **Dependent sweep.** Query bounded open-item pages with
+   `tenbo-dashboard items --status now,next,later --json` for items that may now be redundant given this one
    shipped. A candidate is any item where ALL of the following are true:
    - Status is `later` or `next` (already-done or in-progress aren't worth flagging).
    - One of these references the just-closed item id: `spawned_from:` exact match,

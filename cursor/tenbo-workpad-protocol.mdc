@@ -8,7 +8,10 @@ alwaysApply: false
 
 A workpad is a structured living document Tenbo authors per substantial in-flight roadmap item. It serves as the canonical "where are we" record across sessions and subagent dispatches.
 
-Path: `.tenbo/workpads/<item-id>.md`. Item references it via `workpad:` field. Template: `.cursor/rules/tenbo-.cursor/rules/tenbo-templates/workpad.md.tmpl`.
+Local path: `.tenbo/workpads/<item-id>.md`. Cloud-configured projects store the
+same shape behind the planning-document API. Create/update/archive/restore through
+`item document-*` commands; the backend owns the item reference. Template:
+`.cursor/rules/tenbo-templates/workpad.md.tmpl`.
 
 ---
 
@@ -41,7 +44,9 @@ When in doubt, create one. The cost is one markdown file; the benefit is durable
 - Notes: one timestamped entry — `<date> <time>: Workpad opened.`
 - Confusions: empty.
 
-**User can edit freely.** The workpad is a markdown file, not a structured store. User edits to plan items, ACs, validation, or notes are honored.
+**User can edit freely through the supported surface.** In local mode the workpad
+remains a markdown file. In cloud mode users edit through the dashboard/API and
+agents use `item document-update`; local copies are never canonical.
 
 **Tenbo updates the workpad** at these moments:
 1. After a subagent reports back — append a Notes entry summarizing what was done; check off Plan and AC items the report verified.
@@ -121,7 +126,8 @@ When an item enters `rework`:
 
 When the item flips to `done` and the completion bar is satisfied:
 
-1. Move the workpad to `.tenbo/workpads/archive/<item-id>.md`.
+1. Run `item document-archive <document-id>` (local mode moves it to
+   `.tenbo/workpads/archive/<item-id>.md`; cloud mode archives it atomically).
 2. Clear the `workpad:` field on the roadmap item (or update it to point to the archive path — implementation choice; archive path is preferred for traceability).
 
 Phased items: archive only when ALL phases are complete (matches existing spec lifecycle rule).

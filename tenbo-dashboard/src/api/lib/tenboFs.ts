@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, renameSync, statSync, mkdirSync, type Stats } from 'node:fs';
 import path from 'node:path';
+import { assertLegacyRoadmapWritesAllowed } from '../../cloud/cloudProjectPointer';
 import { parse as parseSimple, stringify as yamlStringify } from 'yaml';
 import { parseYaml, stringifyYaml, patchSeqItem, reorderSeqItems } from './yamlOrdered';
 import { getCached, invalidate as invalidateCache } from './parseCache';
@@ -77,13 +78,13 @@ export function readWorkspace(repoRoot: string): { scopeRefs: { id: string; path
   };
 }
 
-function readArchitecture(repoRoot: string, scopeId: string): Layer[] {
+export function readArchitecture(repoRoot: string, scopeId: string): Layer[] {
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'architecture.yaml');
   const data = getCached(file, 'architecture-yaml', (text) => parseSimple(text) as any);
   return data?.layers ?? [];
 }
 
-function readRoadmap(repoRoot: string, scopeId: string): Item[] {
+export function readRoadmap(repoRoot: string, scopeId: string): Item[] {
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
   const data = getCached(file, 'roadmap-yaml', (text) => parseSimple(text) as any);
   return data?.items ?? [];
@@ -173,10 +174,17 @@ function readLayerDocs(repoRoot: string, scopeId: string): Record<string, LayerD
   return out;
 }
 
-function readCrossCuttingRoadmap(repoRoot: string): Item[] {
+export function readCrossCuttingRoadmap(repoRoot: string): Item[] {
   const file = path.join(tenboDir(repoRoot), 'roadmap.yaml');
   if (!existsSync(file)) return [];
   const data = parseSimple(readFileSync(file, 'utf8')) as any;
+  return data?.items ?? [];
+}
+
+export function readCrossCuttingRoadmapArchive(repoRoot: string): Item[] {
+  const file = path.join(tenboDir(repoRoot), 'roadmap-archive.yaml');
+  if (!existsSync(file)) return [];
+  const data = getCached(file, 'cross-cutting-roadmap-archive-yaml', (text) => parseSimple(text) as any);
   return data?.items ?? [];
 }
 
@@ -250,14 +258,34 @@ export function readDecisions(repoRoot: string): Record<string, DecisionRecord> 
 }
 
 export function readState(repoRoot: string): TenboState {
+  const state = readStaticState(repoRoot);
+  for (const scope of state.scopes) {
+    scope.items = readRoadmap(repoRoot, scope.id);
+    scope.archivedItems = readRoadmapArchive(repoRoot, scope.id);
+  }
+  state.crossCuttingRoadmap = readCrossCuttingRoadmap(repoRoot);
+  const specFiles = readSpecFiles(repoRoot);
+  if (specFiles) state.specFiles = specFiles;
+  return state;
+}
+
+/**
+ * Read the repository-owned, non-roadmap half of a Tenbo workspace.
+ *
+ * Cloud-canonical projects keep architecture, narratives, decisions, and
+ * workspace context in Git while roadmap items live behind the gateway. This
+ * projection lets callers combine those two sources without probing removed
+ * legacy roadmap YAML files.
+ */
+export function readStaticState(repoRoot: string): TenboState {
   const ws = readWorkspace(repoRoot);
   const scopes: Scope[] = ws.scopeRefs.map(ref => ({
     id: ref.id,
     path: ref.path,
     description: ref.description,
     layers: readArchitecture(repoRoot, ref.id),
-    items: readRoadmap(repoRoot, ref.id),
-    archivedItems: readRoadmapArchive(repoRoot, ref.id),
+    items: [],
+    archivedItems: [],
   }));
   const narratives = scopes.reduce<Record<string, string>>((acc, s) => {
     return Object.assign(acc, readNarratives(repoRoot, s.id));
@@ -265,7 +293,6 @@ export function readState(repoRoot: string): TenboState {
   const layerDocs = scopes.reduce<Record<string, LayerDocs>>((acc, s) => {
     return Object.assign(acc, readLayerDocs(repoRoot, s.id));
   }, {});
-  const crossCuttingRoadmap = readCrossCuttingRoadmap(repoRoot);
   const metrics: Record<string, ScopeMetrics> = {};
   for (const s of scopes) {
     const m = readMetrics(repoRoot, s.id);
@@ -274,7 +301,49 @@ export function readState(repoRoot: string): TenboState {
   const workspaceContent = readWorkspaceContent(repoRoot);
   const state: TenboState = { scopes, crossCutting: ws.crossCutting, narratives, workspaceContent };
   state.layerDocs = layerDocs;
-  state.crossCuttingRoadmap = crossCuttingRoadmap;
+  state.crossCuttingRoadmap = [];
+  if (Object.keys(metrics).length > 0) state.metrics = metrics;
+  const decisions = readDecisions(repoRoot);
+  if (decisions) state.decisions = decisions;
+  return state;
+}
+
+/**
+ * Lightweight active-roadmap projection for agent list/item/context reads.
+ *
+ * Unlike `readState`, this deliberately does not touch roadmap archives,
+ * layer narratives, layer-document presence, metrics, specs, or decisions.
+ * Those surfaces remain available to the full local dashboard/validator,
+ * while bounded agent reads avoid paying their I/O and parse cost.
+ */
+export function readActiveState(repoRoot: string): TenboState {
+  const ws = readWorkspace(repoRoot);
+  const scopes: Scope[] = ws.scopeRefs.map((ref) => ({
+    id: ref.id,
+    path: ref.path,
+    description: ref.description,
+    layers: readArchitecture(repoRoot, ref.id),
+    items: readRoadmap(repoRoot, ref.id),
+  }));
+  return {
+    scopes,
+    crossCutting: ws.crossCutting,
+    narratives: {},
+    workspaceContent: readWorkspaceContent(repoRoot),
+    crossCuttingRoadmap: readCrossCuttingRoadmap(repoRoot),
+  };
+}
+
+/** Active state plus validator metadata, still excluding archives and narratives. */
+export function readActiveValidationState(repoRoot: string): TenboState {
+  const state = readActiveState(repoRoot);
+  state.layerDocs = state.scopes.reduce<Record<string, LayerDocs>>((acc, scope) =>
+    Object.assign(acc, readLayerDocs(repoRoot, scope.id)), {});
+  const metrics: Record<string, ScopeMetrics> = {};
+  for (const scope of state.scopes) {
+    const value = readMetrics(repoRoot, scope.id);
+    if (value) metrics[scope.id] = value;
+  }
   if (Object.keys(metrics).length > 0) state.metrics = metrics;
   const specFiles = readSpecFiles(repoRoot);
   if (specFiles) state.specFiles = specFiles;
@@ -330,6 +399,7 @@ export class PatchConflictError extends Error {
 }
 
 export function patchItem(repoRoot: string, scopeId: string, itemId: string, patch: Partial<Item>): void {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
   const text = readFileSync(file, 'utf8');
   const doc = parseYaml(text);
@@ -341,6 +411,7 @@ export function patchItem(repoRoot: string, scopeId: string, itemId: string, pat
 }
 
 export function reorderItems(repoRoot: string, scopeId: string, idsInOrder: string[]): void {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
   const file = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');
   const text = readFileSync(file, 'utf8');
   const doc = parseYaml(text);
@@ -353,6 +424,7 @@ export function reorderItems(repoRoot: string, scopeId: string, idsInOrder: stri
  * Creates the archive file if it doesn't exist. Uses atomic writes for both files.
  */
 export function archiveItems(repoRoot: string, scopeId: string, itemIds: string[]): void {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
   if (itemIds.length === 0) return;
 
   const roadmapFile = path.join(tenboDir(repoRoot), 'scopes', scopeId, 'roadmap.yaml');

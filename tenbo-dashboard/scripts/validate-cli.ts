@@ -10,9 +10,13 @@
  * The `.validation-status.json` schema is unchanged; only presentation changes.
  */
 import { findRepoRoot } from '../src/api/lib/repoRoot';
-import { readState } from '../src/api/lib/tenboFs';
+import { readState, readStaticState } from '../src/api/lib/tenboFs';
 import { validate } from '../src/api/lib/validator';
-import type { ValidateIssue } from '../src/types';
+import type { TenboState, ValidateIssue } from '../src/types';
+import type { LocatedItem } from '../src/api/lib/roadmapStore';
+import { loadCloudConfig } from '../src/cloud/cloudConfig';
+import { CliTenboClient } from '../src/clients/CliTenboClient';
+import { fetchAllCloudItems } from '../src/clients/cliCloudQueries';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -155,6 +159,57 @@ function isMain(): boolean {
   }
 }
 
+export function mergeCloudItemsIntoState(
+  state: TenboState,
+  active: LocatedItem[],
+  archived: LocatedItem[],
+): ValidateIssue[] {
+  const errors: ValidateIssue[] = [];
+  const scopes = new Map(state.scopes.map((scope) => [scope.id, scope]));
+  for (const located of active) {
+    if (located.scopeId === 'cross-cutting') {
+      state.crossCuttingRoadmap!.push(located.item);
+      continue;
+    }
+    const scope = scopes.get(located.scopeId);
+    if (scope) scope.items.push(located.item);
+    else errors.push({ level: 'error', message: `cloud item "${located.item.id}" references unknown scope "${located.scopeId}"`, itemId: located.item.id });
+  }
+  for (const located of archived) {
+    // The legacy TenboState model has no cross-cutting archive collection.
+    // Cross-cutting archived rows remain protected by database constraints and
+    // recovery export verification; omit them here to preserve local validator
+    // semantics until that model is generalized.
+    if (located.scopeId === 'cross-cutting') continue;
+    const scope = scopes.get(located.scopeId);
+    if (scope) (scope.archivedItems ??= []).push(located.item);
+    else errors.push({ level: 'error', message: `cloud item "${located.item.id}" references unknown scope "${located.scopeId}"`, itemId: located.item.id });
+  }
+  return errors;
+}
+
+async function createSnapshot(repoRoot: string): Promise<Snapshot> {
+  const cloud = loadCloudConfig({ repoRoot, optional: true });
+  if (!cloud) {
+    const result = validate(readState(repoRoot));
+    return { generated_at: new Date().toISOString(), errors: result.errors, warnings: result.warnings };
+  }
+
+  const client = new CliTenboClient(repoRoot, { cloudConfig: cloud });
+  const [active, archived] = await Promise.all([
+    fetchAllCloudItems(client, 'listItems', { archived: false }),
+    fetchAllCloudItems(client, 'listItems', { archived: true }),
+  ]);
+  const state = readStaticState(repoRoot);
+  const cloudErrors = mergeCloudItemsIntoState(state, active, archived);
+  const result = validate(state, { planningDocuments: 'cloud' });
+  return {
+    generated_at: new Date().toISOString(),
+    errors: [...cloudErrors, ...result.errors],
+    warnings: result.warnings,
+  };
+}
+
 if (isMain()) {
   const args = process.argv.slice(2);
   const verbose = args.includes('--verbose');
@@ -166,13 +221,7 @@ if (isMain()) {
   const statusPath = path.join(repoRoot, '.tenbo', '.validation-status.json');
   const prev = readPrevSnapshot(statusPath);
 
-  const state = readState(repoRoot);
-  const result = validate(state);
-  const snapshot: Snapshot = {
-    generated_at: new Date().toISOString(),
-    errors: result.errors,
-    warnings: result.warnings,
-  };
+  const snapshot = await createSnapshot(repoRoot);
 
   fs.writeFileSync(statusPath, JSON.stringify(snapshot, null, 2) + '\n');
 

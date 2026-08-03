@@ -158,6 +158,10 @@ export interface Item {
    * `notes:` only.
    */
   workpad?: string;
+  /** Number of failed/reworked execution attempts. */
+  dispatch_attempts?: number;
+  /** Explicit completion-bar override reason, when the user authorized one. */
+  bar_override?: string;
 }
 
 export interface Layer {

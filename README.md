@@ -126,6 +126,19 @@ You haven't written code yet — or you have a scaffold and not much more. tenbo
 
 What happens: tenbo asks a couple of questions about who it's for, proposes 3–5 product-shaped layers (e.g. "Inventory", "Day Cycle", "Save System" — not "controllers" and "models"), and writes a `.tenbo/` directory with empty layer skeletons and 3–5 starter roadmap items derived from your description. You leave the conversation with a plan, not just an empty repo.
 
+Roadmap and planning-document changes go through the typed `tenbo-dashboard item`
+commands. Local projects retain `.tenbo/` as their backend; a cloud-configured
+project uses the same commands/API and must not fall back to local roadmap, spec,
+or workpad edits when the service is unavailable.
+
+Cloud-canonical projects use `.tenbo/cloud-project.json` for roadmap ownership.
+Tenbo 0.14+ validates its schema, backend epoch, and minimum CLI version, then
+uses an explicit environment/profile credential or an intentional
+single-project capability from a private repository. Supabase keys, human
+sessions, admin credentials, and recovery keys are never read from the
+repository. The hosted dashboard uses the same typed gateway with a restored
+human session.
+
 ```
 "What should I build first?"
 ```

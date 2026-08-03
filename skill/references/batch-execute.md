@@ -76,7 +76,8 @@ the design discussion.
 
 ## Prerequisites
 
-- `.tenbo/` must exist with at least one scope and populated `roadmap.yaml`.
+- `.tenbo/` must exist with local scope metadata or a valid cloud-canonical
+  project pointer; the typed work queue must be reachable.
 - Each target item SHOULD have `done_when:` populated. Items without it get
   a warning before dispatch: "[title] has no acceptance criteria — skip or
   add criteria first?"
@@ -85,7 +86,7 @@ the design discussion.
 
 ## Target selection
 
-1. Read all `roadmap.yaml` files. Collect items matching the user's intent:
+1. Run bounded `tenbo-dashboard work-queue` / `items` queries and collect items matching the user's intent:
    - "all next items" → `status: next` (promote each to `now` on dispatch).
    - "all now items" → `status: now`.
    - "next N items" → top N by priority then file order.
@@ -98,9 +99,10 @@ the design discussion.
 4. Present the batch: "Ready to execute N items: [list with titles]. Go?"
    User can reorder, drop items, or confirm.
 
-## Coordinate writes — ensure a hub (x-006)
+## Coordinate writes — ensure a hub (local mode only) (x-006)
 
-Before dispatching any workers, run `npx tenbo-dashboard hub ensure` once. This brings up
+For local projects, run `npx tenbo-dashboard hub ensure` once before dispatching. Cloud projects
+already have one remote command gateway and must never start or fall back to a local writer. The local hub brings up
 the single-writer hub (or no-ops if one is already running) so every worker's roadmap
 mutations route through one serialized writer instead of racing on direct writes — matters
 most for parallel dispatch, where workers would otherwise cold-start-race. It is idempotent

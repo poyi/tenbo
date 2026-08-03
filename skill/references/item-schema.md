@@ -35,16 +35,26 @@ Optional fields items in `roadmap.yaml` may carry:
 
 **Notes:** When the user adds context ("note on X: …"), append a timestamped bullet to `notes:`.
 
-**Agent-safe CLI:** Prefer typed CLI commands for common item mutations instead of hand-editing roadmap YAML:
+**Agent-safe CLI:** Use typed CLI commands for every item and planning-document
+mutation. Cloud-configured projects never fall back to roadmap/spec/workpad files
+after an API failure; local projects use the same commands with the local backend.
 
 ```bash
 npx tenbo-dashboard item show <id> --json
+npx tenbo-dashboard item allocate-id <prefix> --json
+npx tenbo-dashboard item create <id> --scope <scope> --title "<title>" --description "<description>"
+npx tenbo-dashboard item update <id> --patch '<json>'
 npx tenbo-dashboard item set-status <id> <now|next|later|done|dropped>
 npx tenbo-dashboard item add-note <id> "<note>"
 npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed> --evidence "<evidence>"
 npx tenbo-dashboard item link-commit <id> <sha>
+npx tenbo-dashboard item archive <id>
+npx tenbo-dashboard item reopen <id>
+npx tenbo-dashboard item claim <id> --owner <agent>
+npx tenbo-dashboard item document-create <id> --kind <spec|workpad|handoff> --content-file <path>
+npx tenbo-dashboard item document-archive <document-path>
 npx tenbo-dashboard items --status <status> --verification <verification-status> --json
 npx tenbo-dashboard next --json
 ```
 
-**Workpad vs. notes:** `notes:` is for short context bullets the user dictates inline. `workpad:` is the structured living document Tenbo authors for substantial in-flight work. Lightweight items use `notes:` only; substantial items use both, with workpad as the durable execution state.
+**Workpad vs. notes:** `notes:` is for short context bullets the user dictates inline. `workpad:` is the structured living document Tenbo authors for substantial in-flight work. Lightweight items use `notes:` only; substantial items use both, with workpad as the durable execution state. Access cloud-canonical workpads through document commands/API DTOs, not filesystem paths.

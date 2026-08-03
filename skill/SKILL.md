@@ -107,6 +107,16 @@ Lower confidence → one compact offer: "Want me to track this idea?" Decline on
 
 Run once at the start of any session. Branches on `.tenbo/` presence.
 
+**Cloud pointer gate (first):** if `.tenbo/cloud-project.json` exists with
+`mode: "cloud_canonical"`, do not read, recreate, or mutate local roadmap,
+spec, workpad, handoff, journal, or validation-state files. Run
+`npx tenbo-dashboard context session --json`; the CLI validates schema,
+backend epoch, minimum version, and the effective credential before querying
+the canonical cloud project. The credential may come from the environment, an
+external profile, or an intentional capability in a private-repository pointer.
+If it fails, report the cloud/credential error and remain read-only—never use
+the local-project fallback steps below.
+
 ### If `.tenbo/` is absent
 
 1. Run maturity assessment (see subroutine). This is cheap — file counting only.
@@ -126,7 +136,9 @@ Run once at the start of any session. Branches on `.tenbo/` presence.
    `.validation-status.json` and regenerate `agent-context.md` so next session primes
    cleanly. **Explicit-checkpoint trigger:** if the user says "checkpoint",
    "wrap up the session", or similar, regenerate `agent-context.md` immediately.
-2. Bump `tenbo_sessions` in `workspace.yaml`.
+2. For local projects only, bump `tenbo_sessions` in `workspace.yaml`. A
+   cloud-canonical project records roadmap activity through typed commands and
+   leaves Git-canonical workspace documentation unchanged.
 3. **Session briefing.** Run `npx tenbo-dashboard context session --json` first — it
    returns the briefing inputs deterministically (bounded, fail-open): `now` items with
    days-active, stale `now`/`next` items (thresholds from `principles.md`), pending
@@ -238,7 +250,8 @@ subroutine and consider suggesting a tenbo update after the main task.
    session). If declined, capture without `goal_ref` and add a `notes:` line:
    "goals deferred — backfill after migration accepted." Items captured this way
    still go through the rest of capture (classify, generate, validate).
-4. Generate item: `id` (`<prefix>-NNN`), `title` (≤60 chars), `layer`, `status` (`later`
+4. Allocate `id` with `npx tenbo-dashboard item allocate-id <prefix>`, then generate
+   `title` (≤60 chars), `layer`, `status` (`later`
    unless implied), `description` (one plain-English sentence). Set `priority` only when
    phrasing implies urgency.
 5. Enrich proactively if obvious `files_to_read`/`done_when` surface. Otherwise offer:
@@ -250,11 +263,13 @@ subroutine and consider suggesting a tenbo update after the main task.
    violates [layer]'s [rule kind]: '[exact quote]'. Adjust scope, or capture with the
    violation flagged?"* On "capture with violation", record `preflight_violations:
    [{check, outcome: violation, decision: accept-with-violation, rationale}]`. Aligned items pass through silently.
-7. Append to `roadmap.yaml`. Confirm in one sentence. Validate.
+7. Create it with `item create`, then apply enrichment with `item update --patch`.
+   Confirm in one sentence. Validate.
 
 #### Recommend path
 
-Read all `roadmap.yaml` files. Synthesize 2–4 recommendations as a short paragraph
+Run `npx tenbo-dashboard work-queue --status now,next --json` and use bounded
+`items` queries for any additional filters. Synthesize 2–4 recommendations as a short paragraph
 considering: `now` items, recently-unblocked items (via `affects`/`spawned_from`),
 `p0`/`p1` markers, and any health signals in context. Not a queue dump.
 
@@ -275,8 +290,9 @@ with no progress — keep working, demote to `next`, or split?"
 2. Triage: **lightweight** (few hours, one layer) → fill `done_when`/`files_to_read`/`risks`
    via universal prompting rule. **Substantial** (multi-day, multi-layer) → propose 2–5
    child items each with `done_when`; confirm before appending. **Spec-file fallback**
-   (spike, design decision, atomic migration) → create `.tenbo/specs/<item-id>-<slug>.md`
-   with `tenbo_item:` frontmatter + TL;DR section (max 4 sentences); append to `links:`.
+   (spike, design decision, atomic migration) → render the TL;DR (max 4 sentences),
+   then create it with `item document-create <item-id> --kind spec --slug <slug>
+   --content-file <draft>`; the backend owns frontmatter, storage, and item linking.
    **Impact projection (substantial only):** estimate LOC delta, new file count, and new
    item count for each affected layer; compare against `principles.md` thresholds (defaults
    ≥250 LOC added, ≥10 active items per layer). If projected to cross, surface as input —
@@ -290,16 +306,20 @@ with no progress — keep working, demote to `next`, or split?"
    never parallelize today — they always run serially under one subagent. Use phases
    only when the work genuinely is one logical chunk that ships together.
 3. **Workpad** for substantial items (or any item the user is about to start working on
-   actively): create `.tenbo/workpads/<item-id>.md` from `templates/workpad.md.tmpl`; set
-   `workpad:` on the row; seed Acceptance Criteria from `done_when:` and Plan from
-   spec/child items. See `references/workpad-protocol.md`.
+   actively): render `templates/workpad.md.tmpl`, then create it with `item document-create
+   <item-id> --kind workpad --content-file <draft>`; the backend owns the item link.
+   Seed Acceptance Criteria from `done_when:` and Plan from spec/child items. See
+   `references/workpad-protocol.md`.
 4. Validate.
 
-**Spec lifecycle:** `.tenbo/specs/` → archived to `.tenbo/specs/archive/` on `done` →
-un-archived if item re-opens. Phased items: archive only when ALL phases done.
+**Spec lifecycle:** archive/restore planning documents through the typed item
+document commands. In local mode these project to `.tenbo/specs/`; in cloud mode
+no repository planning file is created. Phased items archive only when ALL phases done.
 
-**Workpad lifecycle:** `.tenbo/workpads/` → archived to `.tenbo/workpads/archive/` on `done`.
-Reset (move existing to archive, create fresh with "Lessons" section) on `rework`. See
+**Workpad lifecycle:** archive/restore through typed document commands. In local
+mode these project to `.tenbo/workpads/`; cloud mode stores versions in the
+canonical planning-document backend. Reset (archive, then create a fresh document
+with a "Lessons" section) on `rework`. See
 `references/workpad-protocol.md`.
 
 ---
@@ -376,7 +396,7 @@ Glossary sources (only these): scope `architecture.yaml` descriptions + layer `R
 
 #### Execute next pending item
 
-1. Read all `roadmap.yaml` files. Collect `now` items; ask which scope if multiple.
+1. Run `npx tenbo-dashboard work-queue --status now --json`; ask which scope if multiple.
 2. Confirm: "Next up: [title] — [description]. Go?"
 3. Run `npx tenbo-dashboard context item <id> --json` first — it returns the item's core
    fields, layer constraints, a bounded read-plan, and workpad state in one deterministic
@@ -425,7 +445,8 @@ deps, narrative drift, glossary gaps, recomputed metrics. Same diff format, labe
 **Pre-requisite:** `intent.md` must be populated. If empty: offer to fill it first.
 **Broad scope** (>5 layers): warn on cost, offer layer-by-layer.
 
-1. Resolve target. Load layer constraints, `metrics.json`, open+done items (dedupe),
+1. Resolve target. Load layer constraints, `metrics.json`, open+done items through
+   bounded `tenbo-dashboard items` queries (dedupe),
    and any active records under `.tenbo/decisions/` (skip files with `status: superseded`).
 2. Read source: walk layer globs, sample entry points, skim files >300 lines. Cap ~30 files.
    **Invariant cross-check:** pull `## Invariants` from each layer's `intent.md`; for every
@@ -476,6 +497,30 @@ Full rules: `references/plain-english.md`.
 
 ---
 
+## Backend Mode Rule
+
+Use the typed Tenbo CLI for every roadmap, claim, verification, spec, workpad,
+and handoff read or mutation.
+
+- **Cloud-configured project:** roadmap and planning documents are cloud-canonical.
+  `.tenbo/cloud-project.json` is the ownership pointer. A private repository may
+  intentionally carry a single-project agent capability when repository read
+  access is the authorization boundary; Supabase keys, human sessions, admin
+  credentials, and recovery keys never belong there. Never read, recreate, or
+  edit roadmap/spec/workpad/handoff files directly, and never fall back to a
+  local file write after an API failure. Use `item`, `items`, `work-queue`,
+  `context`, and planning-document commands only. Offline or credential-missing
+  cloud projects are read-only and must surface the explicit error. CLI versions
+  below the pointer minimum must stop and update first.
+- **Local project:** the same commands use `LocalTenboBackend`, auto-route writes to
+  the local hub, and retain the existing direct-file fallback when no hub is
+  available. Git-canonical architecture/source documentation remains normal files.
+
+This rule is shared by Claude, Codex, and Cursor packages. A project backend changes
+transport and canonical ownership, not agent behavior.
+
+---
+
 ## Branch Awareness
 
 Project-management state is trunk-truth — a fact about the project, not about a
@@ -484,7 +529,8 @@ through the typed CLI, which auto-discovers a running dashboard **hub** and send
 the write there so one process is the single writer for `.tenbo/`. When a hub is
 running, do not hand-edit or mutate a worktree's local `.tenbo/` copy — let the CLI
 route to the hub (it resolves the shared repo root across worktrees). If no hub is
-running, the CLI falls back to a direct file write, fail-open.
+running, local projects fall back to a direct file write, fail-open.
+Cloud-canonical projects never use a hub or direct-file fallback.
 
 Before any structural change (layer split/merge, new layer, architecture edits),
 check current branch. If non-main **and no hub is running**: warn once — "You're on
@@ -537,8 +583,7 @@ hand-editing roadmap YAML. The package exposes the historical `tenbo-dashboard`
 binary and an installed `tenbo` alias; use `npx tenbo-dashboard ...` for one-shot
 package execution.
 
-Mutating commands (`set-status`, `add-note`, `verify`, `doc-update`, `complete`,
-`link-commit`) auto-route to a running hub — the single writer — so concurrent
+Mutating commands auto-route to a running hub — the single writer — so concurrent
 agents never conflict on `.tenbo/`; with no hub they write files directly, fail-open.
 Set `TENBO_AGENT=<name>` (or pass `--agent <name>`) so each mutation is attributed;
 `item history <id>` answers who changed an item and when.
@@ -547,13 +592,26 @@ Set `TENBO_AGENT=<name>` (or pass `--agent <name>`) so each mutation is attribut
 npx tenbo-dashboard item show <id> --json
 npx tenbo-dashboard item brief <id> --json
 npx tenbo-dashboard item handoff <id> --json
+npx tenbo-dashboard item allocate-id <prefix> --json
+npx tenbo-dashboard item create <id> --scope <scope> --title "<title>" --description "<description>" --status later --layer <layer>
+npx tenbo-dashboard item update <id> --patch '{"done_when":["criterion"],"risks":["risk"]}'
 npx tenbo-dashboard item set-status <id> <now|next|later|done|dropped>
+npx tenbo-dashboard item reorder <scope> --ids <id1,id2,...>
+npx tenbo-dashboard item archive <id>
+npx tenbo-dashboard item reopen <id> --status next
 npx tenbo-dashboard item add-note <id> "<note>"
 npx tenbo-dashboard item doc-update <id> --date today
 npx tenbo-dashboard item complete <id> --evidence "<evidence>" --doc-update today --commit <sha>
 npx tenbo-dashboard item verify <id> --check --json
 npx tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed> --evidence "<evidence>"
 npx tenbo-dashboard item link-commit <id> <sha>
+npx tenbo-dashboard item claim <id> --owner <agent> --lease 900
+npx tenbo-dashboard item renew-claim <id> --owner <agent> --fencing-token <n>
+npx tenbo-dashboard item release-claim <id> --owner <agent> --fencing-token <n>
+npx tenbo-dashboard item document-create <id> --kind <spec|workpad|handoff> --slug <slug> --content-file <path>
+npx tenbo-dashboard item document-update <document-path> --content-file <path> --expected-version <version>
+npx tenbo-dashboard item document-archive <document-path>
+npx tenbo-dashboard item document-restore <document-path>
 npx tenbo-dashboard items --status <status[,status]> --verification <verification-status> --summary --json
 npx tenbo-dashboard items --type refactor --status next,later --fields id,title,status,priority,layer,verification --json
 npx tenbo-dashboard list --status later --json
@@ -576,17 +634,18 @@ it is advisory, fail-open, and never blocks the commit.
 
 Use `item show` for full detail, `items --summary` / `--fields` for compact
 agent triage, `item brief` before starting a specific item, `item handoff` when
-delegating, and `item complete` for roadmap-only completion hygiene. Use direct
-YAML edits only for operations the CLI does not support yet, such as creating a
-new item, changing rich fields during planning, or multi-file spec/workpad
-archival.
+delegating, and `item complete` for roadmap-only completion hygiene. Do not directly
+edit roadmap, spec, workpad, or handoff storage; the typed command surface covers
+their lifecycle.
 
 ---
 
 ## Validation
 
-After writes, apply validation rules from `references/validation-rules.md`.
-Read `.tenbo/.validation-status.json` for the prior snapshot. Diff against it —
+After local writes, apply validation rules from `references/validation-rules.md`.
+For local projects, read `.tenbo/.validation-status.json` for the prior snapshot. Diff against it —
 new warnings block completion; pre-existing ones are observations.
-If tenbo-dashboard is installed, `npx tenbo-dashboard validate` automates this.
+For cloud-canonical projects, rely on typed command validation, `item verify`,
+and repository cutover CI; never recreate a local validation snapshot.
+If tenbo-dashboard is installed, `npx tenbo-dashboard validate` automates local validation.
 Never declare an operation complete with unresolved errors.

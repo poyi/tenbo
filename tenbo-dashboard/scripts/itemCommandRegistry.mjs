@@ -1,5 +1,70 @@
 export const ITEM_COMMANDS = [
   {
+    name: 'allocate-id',
+    usage: 'tenbo-dashboard item allocate-id <prefix> [--json]',
+    summary: 'Atomically allocate and reserve the next item id.',
+  },
+  {
+    name: 'create',
+    usage: 'tenbo-dashboard item create <id> --scope <scope> --title "<title>" --description "<description>" [--status later] [--layer <id>] [--type <type>] [--priority <p0-p3>] [--goal <gN>] [--json]',
+    summary: 'Create a roadmap item through the typed backend.',
+  },
+  {
+    name: 'update',
+    usage: 'tenbo-dashboard item update <id> --patch \'<json>\' [--expected-version <version>] [--json]',
+    summary: 'Update rich roadmap fields with an optional version guard.',
+  },
+  {
+    name: 'reorder',
+    usage: 'tenbo-dashboard item reorder <scope> --ids <id1,id2,...> [--expected-version <list-version>] [--json]',
+    summary: 'Atomically reorder every active item in a scope.',
+  },
+  {
+    name: 'archive',
+    usage: 'tenbo-dashboard item archive <id> [--expected-version <version>] [--json]',
+    summary: 'Move an item into its roadmap archive.',
+  },
+  {
+    name: 'reopen',
+    usage: 'tenbo-dashboard item reopen <id> [--status now|next|later] [--expected-version <version>] [--json]',
+    summary: 'Restore an archived item or reopen a completed item.',
+  },
+  {
+    name: 'claim',
+    usage: 'tenbo-dashboard item claim <id> [--owner <actor>] [--lease <seconds>] [--json]',
+    summary: 'Claim an item and receive a fencing token.',
+  },
+  {
+    name: 'renew-claim',
+    usage: 'tenbo-dashboard item renew-claim <id> --fencing-token <n> [--owner <actor>] [--lease <seconds>] [--json]',
+    summary: 'Renew the current fenced item claim.',
+  },
+  {
+    name: 'release-claim',
+    usage: 'tenbo-dashboard item release-claim <id> --fencing-token <n> [--owner <actor>] [--json]',
+    summary: 'Release the current fenced item claim.',
+  },
+  {
+    name: 'document-create',
+    usage: 'tenbo-dashboard item document-create <item-id> --kind <spec|workpad|handoff> [--slug <slug>] (--content "<markdown>"|--content-file <path>) [--json]',
+    summary: 'Create and attach a planning document.',
+  },
+  {
+    name: 'document-update',
+    usage: 'tenbo-dashboard item document-update <document-path> (--content "<markdown>"|--content-file <path>) [--expected-version <version>] [--json]',
+    summary: 'Update a planning document with an optional version guard.',
+  },
+  {
+    name: 'document-archive',
+    usage: 'tenbo-dashboard item document-archive <document-path> [--expected-version <version>] [--json]',
+    summary: 'Archive a spec, workpad, or handoff.',
+  },
+  {
+    name: 'document-restore',
+    usage: 'tenbo-dashboard item document-restore <document-path> [--expected-version <version>] [--json]',
+    summary: 'Restore an archived planning document.',
+  },
+  {
     name: 'show',
     usage: 'tenbo-dashboard item show <id> [--json]',
     summary: 'Show the full roadmap item.',

@@ -44,6 +44,10 @@ export interface JournalEvent {
   itemId: string;
   /** The mutation operation, e.g. 'add-note', 'complete', 'set-status'. */
   operation: string;
+  /** Hash of the typed request. Reusing a mutation id with a different hash is rejected. */
+  requestHash?: string;
+  /** Stored typed command result, used to make allocation/create/document commands replay-safe. */
+  result?: unknown;
 }
 
 export type JournalEventInput = Omit<JournalEvent, 'timestamp'> & { timestamp?: string };
@@ -112,6 +116,8 @@ export function appendJournalEvent(repoRoot: string, event: JournalEventInput, o
     itemId: event.itemId,
     operation: event.operation,
     timestamp: event.timestamp ?? now().toISOString(),
+    ...(event.requestHash ? { requestHash: event.requestHash } : {}),
+    ...(event.result !== undefined ? { result: event.result } : {}),
   };
 
   const dir = journalDir(repoRoot);

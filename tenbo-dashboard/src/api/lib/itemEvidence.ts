@@ -1,4 +1,5 @@
 import { findItem } from './roadmapStore';
+import type { Item } from '../../types';
 
 export type ItemEvidenceVerdict = 'likely_done' | 'likely_open' | 'needs_review' | 'inconsistent';
 
@@ -13,7 +14,10 @@ export interface ItemEvidenceReport {
 
 export function checkItemEvidence(repoRoot: string, itemId: string): ItemEvidenceReport {
   const located = findItem(repoRoot, itemId);
-  const item = located.item;
+  return checkItemEvidenceForItem(located.item);
+}
+
+export function checkItemEvidenceForItem(item: Item): ItemEvidenceReport {
   const missing: string[] = [];
   const signals: string[] = [];
 

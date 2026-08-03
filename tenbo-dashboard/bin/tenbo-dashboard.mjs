@@ -56,6 +56,7 @@ const commands = {
   reminder: 'scripts/reminder.ts',
   hook: 'scripts/hook.ts',
   reconcile: 'scripts/reconcile.ts',
+  cloud: 'scripts/cloud.ts',
   hub: 'scripts/hub.ts',
 };
 
@@ -134,6 +135,8 @@ ${topLevelItemHelpLines().join('\n')}
                                    [--since <ref>] [--dry-run] [--json]
   tenbo-dashboard reconcile clear  Remove pending-reconciliation entries once a doc
                                    update lands [--layer <scope:layer>] [--commit <sha>]
+  tenbo-dashboard cloud             Cloud migration, parity, recovery, and trusted Git tools
+                                   (run 'tenbo-dashboard cloud --help')
   tenbo-dashboard hub start        Run a headless, API-only hub server in the
                                    foreground (health+mutate only, no browser UI)
                                    [--port <n>]

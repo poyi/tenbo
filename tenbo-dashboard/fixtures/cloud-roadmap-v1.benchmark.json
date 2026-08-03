@@ -1,0 +1,29 @@
+{
+  "format": "tenbo-cloud-benchmark-v1",
+  "schema_version": 1,
+  "project_id": "9bb1252c-737c-4188-8772-9bf35ab71124",
+  "source": {
+    "manifest_hash": "b17772cfbc144f577d0274debd80c5ac2b94d32110ab5558c67bcfafdc41fd0c",
+    "commit_sha": "8ed5e9679118cbde91cbbc55a887f2c9defde172",
+    "counts": { "items": 1555, "relations": 2744, "planning_documents": 339, "legacy_mutations": 1435 }
+  },
+  "deployment": {
+    "project_ref": "dopxhwhlwlwigobnokvl",
+    "region": "West US (Oregon)",
+    "api_schema_version": 1,
+    "backend_epoch": 1,
+    "minimum_cli_version": "0.14.0"
+  },
+  "response_caps": {
+    "feature": { "rows": 32, "bytes": 65536, "tokens": 4000, "estimator": "tenbo-token-estimator-v1" },
+    "item_page_rows": 50
+  },
+  "samples": { "warmups": 3, "warm": 30, "cold_processes": 5 },
+  "gates_ms": { "item_brief_warm_p95": 300, "filtered_items_warm_p95": 300, "feature_context_warm_p95": 2000 },
+  "queries": {
+    "item_id": "x-090",
+    "item_filters": { "status": ["now", "next"] },
+    "item_projection": "summary",
+    "feature_query": "cloud roadmap source of truth"
+  }
+}

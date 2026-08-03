@@ -2,12 +2,21 @@ import { listNextItems } from '../src/api/lib/roadmapStore';
 import { summarizeItem } from '../src/api/lib/itemProjection';
 import { hasFlag } from './cliArgs';
 import { handleCliError, isMain, repoRootFromCwd, runMain, serialize, type CliResult } from './cliResult';
+import { loadCloudConfig } from '../src/cloud/cloudConfig';
+import { CliTenboClient } from '../src/clients/CliTenboClient';
+import { fetchAllCloudItems } from '../src/clients/cliCloudQueries';
+import { comparePriority } from '../src/api/lib/priority';
 
 export function runNextCli(repoRoot: string, args: string[]): CliResult {
+  const cloud = loadCloudConfig({ repoRoot, optional: true });
+  if (cloud) return runCloudNextCli(repoRoot, args, cloud) as unknown as CliResult;
+  return renderNext(listNextItems(repoRoot), args);
+}
+
+function renderNext(items: ReturnType<typeof listNextItems>, args: string[]): CliResult {
   const json = hasFlag(args, '--json');
   const agentSummary = hasFlag(args, '--agent-summary');
   try {
-    const items = listNextItems(repoRoot);
     if (agentSummary) {
       const projected = items.map((entry) => summarizeItem(entry));
       return serialize({
@@ -29,6 +38,14 @@ export function runNextCli(repoRoot: string, args: string[]): CliResult {
   }
 }
 
+async function runCloudNextCli(repoRoot: string, args: string[], cloud: NonNullable<ReturnType<typeof loadCloudConfig>>): Promise<CliResult> {
+  try {
+    const items = await fetchAllCloudItems(new CliTenboClient(repoRoot, { cloudConfig: cloud }), 'getWorkQueue');
+    items.sort((a, b) => (a.item.status === b.item.status ? 0 : a.item.status === 'now' ? -1 : 1) || comparePriority(a.item, b.item));
+    return renderNext(items, args);
+  } catch (error) { return handleCliError(error, hasFlag(args, '--json')); }
+}
+
 if (isMain(import.meta.url)) {
-  runMain(runNextCli(repoRootFromCwd(), process.argv.slice(2)));
+  runMain(await runNextCli(repoRootFromCwd(), process.argv.slice(2)));
 }

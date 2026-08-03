@@ -1,6 +1,6 @@
 {
   "name": "tenbo-dashboard",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Local-first architecture dashboard and CLI tools for .tenbo/ repos",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,7 @@
     "bin/",
     "src/",
     "scripts/",
+    "fixtures/",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!src/test-setup.ts",
@@ -50,6 +51,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@parcel/watcher": "^2.5.6",
+    "@supabase/supabase-js": "2.58.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@xyflow/react": "^12.10.2",
     "chokidar": "^3.6.0",

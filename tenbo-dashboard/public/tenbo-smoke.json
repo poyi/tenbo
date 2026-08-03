@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "surface": "tenbo-hosted-dashboard",
+  "contract": "x-094-v1",
+  "browser_marker": "[data-tenbo-hosted-contract='x-094-v1']",
+  "required_public_env": [
+    "VITE_TENBO_CLOUD_MODE",
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_ANON_KEY",
+    "VITE_TENBO_CLOUD_API_URL"
+  ],
+  "credential_policy": "restored-human-jwt-only"
+}

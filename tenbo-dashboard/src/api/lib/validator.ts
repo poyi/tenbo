@@ -17,7 +17,12 @@ const DOC_UPDATE_REQUIRED_TYPES = new Set(['feature', 'refactor', 'bug']);
 const DOC_UPDATE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DOC_UPDATE_SKIPPED_RE = /^skipped\s*[—:-]\s*\S/;
 
-export function validate(state: TenboState): ValidateResult {
+export interface ValidateOptions {
+  /** Planning-document lifecycle is stored as document metadata, not Git paths. */
+  planningDocuments?: 'filesystem' | 'cloud';
+}
+
+export function validate(state: TenboState, options: ValidateOptions = {}): ValidateResult {
   const errors: ValidateIssue[] = [];
   const warnings: ValidateIssue[] = [];
 
@@ -151,6 +156,7 @@ export function validate(state: TenboState): ValidateResult {
       const inSpecs = link.startsWith('.tenbo/specs/');
       if (!inSpecs) continue;
       const inArchive = link.startsWith('.tenbo/specs/archive/');
+      if (options.planningDocuments === 'cloud') continue;
       // File-existence check (only when state.specFiles is populated).
       if (state.specFiles && !state.specFiles.has(link)) {
         warnings.push({

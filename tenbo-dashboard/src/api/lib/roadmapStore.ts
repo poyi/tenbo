@@ -2,12 +2,19 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseDocument, isMap, isSeq, type Document } from 'yaml';
-import { readState } from './tenboFs';
+import {
+  readCrossCuttingRoadmap,
+  readRoadmap,
+  readRoadmapArchive,
+  readState,
+  readWorkspace,
+} from './tenboFs';
 import { invalidate as invalidateCache } from './parseCache';
 import { validate } from './validator';
 import { comparePriority } from './priority';
 import { normalizeNotes } from './notes';
 import type { Item, Priority, Status, VerificationStatus, ValidateResult } from '../../types';
+import { assertLegacyRoadmapWritesAllowed } from '../../cloud/cloudProjectPointer';
 
 export type RoadmapErrorCode = 'not_found' | 'conflict' | 'invalid_status' | 'invalid_args';
 
@@ -27,6 +34,7 @@ export interface LocatedItem {
   scopeId: string;
   filePath: string;
   item: Item;
+  archived?: boolean;
 }
 
 export interface WriteResult {
@@ -43,15 +51,19 @@ export interface ListItemFilters {
   type?: Item['type'];
   priority?: Priority;
   layer?: string;
+  scopeId?: string;
+  archived?: boolean;
+  search?: string;
 }
 
 interface RoadmapFileRef {
   scopeId: string;
   filePath: string;
   items: Item[];
+  archived: boolean;
 }
 
-interface MutationOptions {
+export interface MutationOptions {
   beforeWrite?: () => void;
   /**
    * Resolved agent identity (see hub/identity.ts) attributing this mutation.
@@ -60,6 +72,8 @@ interface MutationOptions {
    * td-030), behavior is unchanged from before attribution existed.
    */
   actor?: string;
+  /** Opaque item version returned by the query contract. */
+  expectedVersion?: string;
 }
 
 const STATUSES: readonly Status[] = ['now', 'next', 'later', 'done', 'dropped'];
@@ -73,26 +87,62 @@ function hashText(text: string): string {
   return createHash('sha1').update(text).digest('hex');
 }
 
-function readRoadmapRefs(repoRoot: string): RoadmapFileRef[] {
-  const state = readState(repoRoot);
-  const refs: RoadmapFileRef[] = state.scopes.map((scope) => ({
+export function itemVersion(item: Item): string {
+  return createHash('sha256').update(JSON.stringify(item)).digest('hex');
+}
+
+export function listVersion(items: Item[]): string {
+  return createHash('sha256').update(JSON.stringify(items.map((item) => item.id))).digest('hex');
+}
+
+function readRoadmapRefs(repoRoot: string, includeArchived = false): RoadmapFileRef[] {
+  // Lightweight path: reads only workspace.yaml plus the active roadmap files.
+  // Do not replace this with readState(); agent item/list reads must not load
+  // archives, narratives, metrics, specs, decisions, or workspace docs.
+  const workspace = readWorkspace(repoRoot);
+  const refs: RoadmapFileRef[] = workspace.scopeRefs.map((scope) => ({
     scopeId: scope.id,
     filePath: path.join(tenboDir(repoRoot), 'scopes', scope.id, 'roadmap.yaml'),
-    items: scope.items,
+    items: readRoadmap(repoRoot, scope.id),
+    archived: false,
   }));
   const crossFile = path.join(tenboDir(repoRoot), 'roadmap.yaml');
   if (existsSync(crossFile)) {
     refs.push({
       scopeId: 'cross-cutting',
       filePath: crossFile,
-      items: state.crossCuttingRoadmap ?? [],
+      items: readCrossCuttingRoadmap(repoRoot),
+      archived: false,
     });
+  }
+  if (includeArchived) {
+    for (const scope of workspace.scopeRefs) {
+      const archiveFile = path.join(tenboDir(repoRoot), 'scopes', scope.id, 'roadmap-archive.yaml');
+      if (!existsSync(archiveFile)) continue;
+      refs.push({
+        scopeId: scope.id,
+        filePath: archiveFile,
+        items: readRoadmapArchive(repoRoot, scope.id),
+        archived: true,
+      });
+    }
+    const crossArchiveFile = path.join(tenboDir(repoRoot), 'roadmap-archive.yaml');
+    if (existsSync(crossArchiveFile)) {
+      const data = getRoadmapItems(crossArchiveFile);
+      refs.push({ scopeId: 'cross-cutting', filePath: crossArchiveFile, items: data, archived: true });
+    }
   }
   return refs;
 }
 
-function findRef(repoRoot: string, itemId: string): { ref: RoadmapFileRef; item: Item } {
-  for (const ref of readRoadmapRefs(repoRoot)) {
+function getRoadmapItems(filePath: string): Item[] {
+  const doc = parseRoadmap(readFileSync(filePath, 'utf8'));
+  const value = doc.toJS() as { items?: Item[] } | null;
+  return value?.items ?? [];
+}
+
+function findRef(repoRoot: string, itemId: string, includeArchived = false): { ref: RoadmapFileRef; item: Item } {
+  for (const ref of readRoadmapRefs(repoRoot, includeArchived)) {
     const item = ref.items.find((candidate) => candidate.id === itemId);
     if (item) return { ref, item };
   }
@@ -137,7 +187,11 @@ function mutateItem(
   patcher: (item: Item) => Partial<Item>,
   opts: MutationOptions = {},
 ): WriteResult {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
   const { ref, item } = findRef(repoRoot, itemId);
+  if (opts.expectedVersion && opts.expectedVersion !== itemVersion(item)) {
+    throw new RoadmapStoreError('conflict', `item ${itemId} changed since it was read`, true);
+  }
   const beforeText = readFileSync(ref.filePath, 'utf8');
   const beforeHash = hashText(beforeText);
   const doc = parseRoadmap(beforeText);
@@ -170,9 +224,9 @@ function mutateItem(
   };
 }
 
-export function findItem(repoRoot: string, itemId: string): LocatedItem {
-  const { ref, item } = findRef(repoRoot, itemId);
-  return { scopeId: ref.scopeId, filePath: ref.filePath, item };
+export function findItem(repoRoot: string, itemId: string, includeArchived = false): LocatedItem & { archived: boolean } {
+  const { ref, item } = findRef(repoRoot, itemId, includeArchived);
+  return { scopeId: ref.scopeId, filePath: ref.filePath, item, archived: ref.archived };
 }
 
 /**
@@ -281,10 +335,201 @@ export function completeItem(
   }, opts);
 }
 
+export type RichItemPatch = Partial<Pick<Item,
+  | 'title'
+  | 'description'
+  | 'layer'
+  | 'layers'
+  | 'links'
+  | 'affects'
+  | 'done_when'
+  | 'files_to_read'
+  | 'risks'
+  | 'type'
+  | 'priority'
+  | 'goal_ref'
+  | 'phases'
+  | 'spawned_from'
+  | 'superseded_by'
+  | 'related'
+  | 'workpad'
+  | 'doc_update'
+  | 'dispatch_attempts'
+  | 'bar_override'
+>>;
+
+export function updateItemRichFields(
+  repoRoot: string,
+  itemId: string,
+  patch: RichItemPatch,
+  opts: MutationOptions = {},
+): WriteResult {
+  if (Object.keys(patch).length === 0) {
+    throw new RoadmapStoreError('invalid_args', 'rich item patch must include at least one field');
+  }
+  const allowed = new Set([
+    'title', 'description', 'layer', 'layers', 'links', 'affects', 'done_when',
+    'files_to_read', 'risks', 'type', 'priority', 'goal_ref', 'phases',
+    'spawned_from', 'superseded_by', 'related', 'workpad', 'doc_update',
+    'dispatch_attempts', 'bar_override',
+  ]);
+  const unknown = Object.keys(patch).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new RoadmapStoreError('invalid_args', `unsupported rich item field(s): ${unknown.join(', ')}`);
+  }
+  return mutateItem(repoRoot, itemId, () => patch, opts);
+}
+
+function roadmapPath(repoRoot: string, scopeId: string, archived = false): string {
+  if (scopeId === 'cross-cutting') {
+    return path.join(tenboDir(repoRoot), archived ? 'roadmap-archive.yaml' : 'roadmap.yaml');
+  }
+  return path.join(tenboDir(repoRoot), 'scopes', scopeId, archived ? 'roadmap-archive.yaml' : 'roadmap.yaml');
+}
+
+function itemSequence(doc: Document) {
+  const root = doc.contents;
+  if (!isMap(root)) throw new RoadmapStoreError('invalid_args', 'roadmap root is not a map');
+  const node = root.get('items', true);
+  if (!isSeq(node)) throw new RoadmapStoreError('invalid_args', 'roadmap items is not a sequence');
+  return node;
+}
+
+export function createRoadmapItem(repoRoot: string, scopeId: string, item: Item): WriteResult {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
+  if (!item.id || !item.title || !item.description || !item.status) {
+    throw new RoadmapStoreError('invalid_args', 'item id, title, description, and status are required');
+  }
+  try {
+    findRef(repoRoot, item.id, true);
+    throw new RoadmapStoreError('conflict', `item ${item.id} already exists`);
+  } catch (err) {
+    if (!(err instanceof RoadmapStoreError) || err.code !== 'not_found') throw err;
+  }
+
+  const filePath = roadmapPath(repoRoot, scopeId);
+  if (!existsSync(path.dirname(filePath))) {
+    throw new RoadmapStoreError('invalid_args', `scope ${scopeId} does not exist`);
+  }
+  const beforeText = existsSync(filePath) ? readFileSync(filePath, 'utf8') : 'items: []\n';
+  const doc = parseRoadmap(beforeText);
+  itemSequence(doc).add(item);
+  if (existsSync(filePath) && readFileSync(filePath, 'utf8') !== beforeText) {
+    throw new RoadmapStoreError('conflict', `roadmap changed while creating ${item.id}`, true);
+  }
+  atomicWrite(filePath, doc.toString({ lineWidth: 0, blockQuote: 'literal' }));
+  return currentWriteResult(repoRoot, item.id);
+}
+
+function removeItemFromDocument(doc: Document, itemId: string): Item {
+  const seq = itemSequence(doc);
+  const index = seq.items.findIndex((entry) => isMap(entry) && entry.get('id') === itemId);
+  if (index < 0) throw new RoadmapStoreError('not_found', `item ${itemId} not found`);
+  const item = ((doc.toJS() as { items?: Item[] } | null)?.items ?? []).find((entry) => entry.id === itemId);
+  if (!item) throw new RoadmapStoreError('not_found', `item ${itemId} not found`);
+  seq.delete(index);
+  return item;
+}
+
+function appendItemToDocument(doc: Document, item: Item): void {
+  const seq = itemSequence(doc);
+  const duplicate = seq.items.some((entry) => isMap(entry) && entry.get('id') === item.id);
+  if (duplicate) throw new RoadmapStoreError('conflict', `item ${item.id} already exists in destination`);
+  seq.add(item);
+}
+
+function moveItemBetweenRoadmaps(
+  repoRoot: string,
+  itemId: string,
+  source: RoadmapFileRef,
+  destinationArchived: boolean,
+  transform: (item: Item) => Item = (item) => item,
+): void {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
+  const destinationPath = roadmapPath(repoRoot, source.scopeId, destinationArchived);
+  const sourceText = readFileSync(source.filePath, 'utf8');
+  const sourceDoc = parseRoadmap(sourceText);
+  const destinationText = existsSync(destinationPath) ? readFileSync(destinationPath, 'utf8') : 'items: []\n';
+  const destinationDoc = parseRoadmap(destinationText);
+  const item = transform(removeItemFromDocument(sourceDoc, itemId));
+  appendItemToDocument(destinationDoc, item);
+
+  if (readFileSync(source.filePath, 'utf8') !== sourceText) {
+    throw new RoadmapStoreError('conflict', `roadmap changed while moving ${itemId}`, true);
+  }
+  if (existsSync(destinationPath) && readFileSync(destinationPath, 'utf8') !== destinationText) {
+    throw new RoadmapStoreError('conflict', `destination roadmap changed while moving ${itemId}`, true);
+  }
+
+  // Destination first makes a process crash recoverable as a duplicate rather
+  // than silently losing the item between the two files.
+  atomicWrite(destinationPath, destinationDoc.toString({ lineWidth: 0, blockQuote: 'literal' }));
+  atomicWrite(source.filePath, sourceDoc.toString({ lineWidth: 0, blockQuote: 'literal' }));
+}
+
+export function archiveRoadmapItem(repoRoot: string, itemId: string, opts: MutationOptions = {}): LocatedItem & { archived: true } {
+  const { ref, item } = findRef(repoRoot, itemId);
+  if (opts.expectedVersion && opts.expectedVersion !== itemVersion(item)) {
+    throw new RoadmapStoreError('conflict', `item ${itemId} changed since it was read`, true);
+  }
+  moveItemBetweenRoadmaps(repoRoot, itemId, ref, true);
+  const moved = findItem(repoRoot, itemId, true);
+  return { ...moved, archived: true };
+}
+
+export function reopenRoadmapItem(
+  repoRoot: string,
+  itemId: string,
+  status: Exclude<Status, 'done' | 'dropped'> = 'next',
+  opts: MutationOptions = {},
+): WriteResult {
+  const { ref, item } = findRef(repoRoot, itemId, true);
+  if (opts.expectedVersion && opts.expectedVersion !== itemVersion(item)) {
+    throw new RoadmapStoreError('conflict', `item ${itemId} changed since it was read`, true);
+  }
+  if (!ref.archived) return setItemStatus(repoRoot, itemId, status, opts);
+  moveItemBetweenRoadmaps(repoRoot, itemId, ref, false, (value) => ({ ...value, status }));
+  return currentWriteResult(repoRoot, itemId);
+}
+
+export function reorderRoadmapItems(
+  repoRoot: string,
+  scopeId: string,
+  idsInOrder: string[],
+  expectedListVersion?: string,
+): { items: Item[]; version: string } {
+  assertLegacyRoadmapWritesAllowed(repoRoot);
+  const filePath = roadmapPath(repoRoot, scopeId);
+  const beforeText = readFileSync(filePath, 'utf8');
+  const beforeItems = getRoadmapItems(filePath);
+  if (expectedListVersion && expectedListVersion !== listVersion(beforeItems)) {
+    throw new RoadmapStoreError('conflict', `roadmap list ${scopeId} changed since it was read`, true);
+  }
+  if (idsInOrder.length !== beforeItems.length || new Set(idsInOrder).size !== beforeItems.length) {
+    throw new RoadmapStoreError('invalid_args', 'reorder must contain every active item id exactly once');
+  }
+  const beforeIds = new Set(beforeItems.map((item) => item.id));
+  if (idsInOrder.some((id) => !beforeIds.has(id))) {
+    throw new RoadmapStoreError('invalid_args', 'reorder contains an unknown item id');
+  }
+  const doc = parseRoadmap(beforeText);
+  const seq = itemSequence(doc);
+  const byId = new Map(seq.items.map((entry) => [isMap(entry) ? String(entry.get('id')) : '', entry]));
+  seq.items = idsInOrder.map((id) => byId.get(id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  if (readFileSync(filePath, 'utf8') !== beforeText) {
+    throw new RoadmapStoreError('conflict', `roadmap changed while reordering ${scopeId}`, true);
+  }
+  atomicWrite(filePath, doc.toString({ lineWidth: 0, blockQuote: 'literal' }));
+  const items = getRoadmapItems(filePath);
+  return { items, version: listVersion(items) };
+}
+
 export function listItems(repoRoot: string, filters: ListItemFilters = {}): LocatedItem[] {
   const out: LocatedItem[] = [];
   const statuses = Array.isArray(filters.status) ? filters.status : filters.status ? [filters.status] : [];
-  for (const ref of readRoadmapRefs(repoRoot)) {
+  for (const ref of readRoadmapRefs(repoRoot, filters.archived === true)) {
+    if (filters.archived !== undefined && ref.archived !== filters.archived) continue;
+    if (filters.scopeId && ref.scopeId !== filters.scopeId) continue;
     for (const item of ref.items) {
       if (statuses.length > 0 && !statuses.includes(item.status)) continue;
       if (filters.verification && item.verification?.status !== filters.verification) continue;
@@ -299,7 +544,12 @@ export function listItems(repoRoot: string, filters: ListItemFilters = {}): Loca
         const matchesGoal = Array.isArray(goalRef) ? goalRef.includes(filters.goal) : goalRef === filters.goal;
         if (!matchesGoal) continue;
       }
-      out.push({ scopeId: ref.scopeId, filePath: ref.filePath, item });
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        const haystack = `${item.id} ${item.title} ${item.description}`.toLowerCase();
+        if (!haystack.includes(q)) continue;
+      }
+      out.push({ scopeId: ref.scopeId, filePath: ref.filePath, item, archived: ref.archived });
     }
   }
   return out;

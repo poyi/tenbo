@@ -43,10 +43,15 @@ The same package ships commands the skill uses behind the scenes — also runnab
 
 ```bash
 npx tenbo-dashboard item show sk-030 --json
+npx tenbo-dashboard item allocate-id sk --json
+npx tenbo-dashboard item create sk-031 --scope skill --title "Add a command" --description "Expose the command through the typed backend."
+npx tenbo-dashboard item update sk-031 --patch '{"done_when":["Command is covered by tests."]}'
 npx tenbo-dashboard item set-status sk-030 done
 npx tenbo-dashboard item add-note sk-030 "Implemented; live verification pending"
 npx tenbo-dashboard item verify sk-030 --status pending_live --evidence "npm test -- --run"
 npx tenbo-dashboard item link-commit sk-030 7fc09a5
+npx tenbo-dashboard item claim sk-031 --owner agent-a --lease 900
+npx tenbo-dashboard item document-create sk-031 --kind spec --slug command --content-file /tmp/sk-031.md
 npx tenbo-dashboard items --status done --verification pending_live --json
 npx tenbo-dashboard next --json
 npx tenbo-dashboard context feature --query "help me build X" --json
@@ -64,6 +69,82 @@ Installed packages also expose a shorter `tenbo` binary alias for the same comma
 `context feature` is the agent-facing read path. It returns likely scope/layers,
 matching roadmap items, active work, goal refs, recommended files, and freshness warnings
 as one JSON payload so agents do not have to re-read every roadmap file by hand.
+
+The package exposes one transport-neutral contract to the browser and CLI, with
+small item, context, coordination, planning-document, and project ports. Local
+projects use `LocalTenboBackend`; hosted deployments inject a typed
+`CloudTenboBackend` gateway. Browser modules never import filesystem storage.
+
+### Cloud backend and migration
+
+Cloud mode is explicit. When configured, supported item commands plus
+`items`, `next`, `work-queue`, `context`, and `next-id` use the cloud gateway
+exclusively; a failed cloud write never falls back to roadmap YAML.
+
+After cutover, `.tenbo/cloud-project.json` declares the canonical project,
+backend epoch, schema, and minimum CLI version. Tenbo 0.14+ validates that
+pointer before every route. A private repository may include a
+`repository_agent_token` when repository read access is intentionally the
+authorization boundary; this makes trusted agent checkouts work with no
+machine-specific setup. The token must be a single-project editor capability,
+never a Supabase key or Tenbo administrator credential.
+
+Explicit environment or external-profile credentials override the repository
+capability. Without either form, a canonical pointer fails closed and never
+revives the legacy file backend. External profiles are loaded from
+`${XDG_CONFIG_HOME:-~/.config}/tenbo/<profile>.json` and must be chmod 600.
+
+Provide non-secret endpoint identity and exactly one human or agent credential
+through the process environment:
+
+```sh
+export TENBO_CLOUD_API_URL="https://<project>.supabase.co/functions/v1/tenbo-api"
+export TENBO_CLOUD_PROJECT_ID="<tenbo-project-uuid>"
+export TENBO_CLOUD_ANON_KEY="<supabase-anon-or-publishable-key>"
+export TENBO_CLOUD_AGENT_TOKEN="<opaque-project-agent-token>"
+# Dashboard/browser sessions use TENBO_CLOUD_HUMAN_JWT instead of the agent token.
+```
+
+Alternatively set `TENBO_CLOUD_CREDENTIALS_FILE` to an external chmod-600 JSON
+file (it is rejected when stored inside the repository):
+
+```json
+{
+  "api_url": "https://<project>.supabase.co/functions/v1/tenbo-api",
+  "project_id": "<tenbo-project-uuid>",
+  "anon_key": "<supabase-anon-or-publishable-key>",
+  "agent_token": "<opaque-project-agent-token>"
+}
+```
+
+Migration and recovery commands are deterministic and write-single:
+
+```sh
+tenbo-dashboard cloud manifest --output /restricted/tenbo-manifest.json
+tenbo-dashboard cloud import --manifest /restricted/tenbo-manifest.json
+# Final one-time cutover: exact roadmap/planning replacement while preserving
+# trusted Git projections and cloud-native audit history.
+tenbo-dashboard cloud import --manifest /restricted/tenbo-manifest.json --replace
+tenbo-dashboard cloud compare --manifest /restricted/tenbo-manifest.json
+tenbo-dashboard cloud shadow-read --kind item --item x-093
+tenbo-dashboard cloud benchmark --fixture /path/to/cloud-roadmap-v1.benchmark.json
+tenbo-dashboard cloud export --output /restricted/tenbo-recovery.json
+tenbo-dashboard cloud restore --input /restricted/tenbo-recovery.json --confirm-project <uuid>
+```
+
+Recovery exports retain every mutation's exact actor, request/result,
+committed versions, and audit classification. Recovery replacement is distinct
+from roadmap cutover replacement and remains an explicit admin-only operation.
+
+Trusted Git projections never accept document content as a CLI argument. The
+tool requires a full commit SHA, obtains exact bytes with `git show
+<sha>:<path>`, verifies repository identity and SHA-256, then invokes the
+admin-only ingestion command:
+
+```sh
+tenbo-dashboard cloud ingest-git --commit <full-sha> --path .tenbo/overview.md
+tenbo-dashboard cloud dirty-overlay --commit <full-sha> --path .tenbo/overview.md
+```
 
 ## What is tenbo?
 
