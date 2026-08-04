@@ -73,6 +73,29 @@ describe('CloudDashboardClient bounded human boundary', () => {
     });
     expect(request).not.toHaveProperty('query');
   });
+
+  it('receives the same normalized notes shape as the agent transport', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      kind: 'itemPage',
+      value: {
+        items: [{
+          scope_id: 'editor', version: '3', archived: false,
+          item: { id: 'ed-1', title: 'Cloud item', status: 'next', description: 'cloud', notes: ['first', 'second'] },
+        }],
+        page: { row_count: 1, has_more: false },
+      },
+    }), { status: 200 }));
+    const client = new CloudDashboardClient(
+      'https://api.test',
+      'public-key',
+      () => ({ userId: 'user-1', accessToken: 'human-jwt' }),
+      fetchImpl as typeof fetch,
+    );
+
+    const page = await client.listItems(PROJECT_A, {});
+
+    expect(page.items[0].item.notes).toBe('- first\n- second');
+  });
 });
 
 describe('ProjectResponseGuard', () => {

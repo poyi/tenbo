@@ -42,6 +42,71 @@ describe('item CLI cloud mode', () => {
     expect(readFileSync(roadmapPath, 'utf8')).toBe(original);
     expect(existsSync(path.join(repo, '.tenbo/journal'))).toBe(false);
   });
+
+  it.each([
+    { label: 'string', notes: 'Cloud note', expectedSignal: true },
+    { label: 'array', notes: ['Cloud note', 'Second note'], expectedSignal: true },
+    { label: 'empty string', notes: '', expectedSignal: false },
+    { label: 'empty array', notes: [], expectedSignal: false },
+    { label: 'absent', notes: undefined, expectedSignal: false },
+  ])('checks evidence read-only when cloud notes are $label', async ({ notes, expectedSignal }) => {
+    const repo = fixtureRepo();
+    vi.stubEnv('TENBO_CLOUD_API_URL', 'https://example.test/functions/v1/tenbo-api');
+    vi.stubEnv('TENBO_CLOUD_PROJECT_ID', PROJECT_ID);
+    vi.stubEnv('TENBO_CLOUD_AGENT_TOKEN', 'tenbo_agent_secret');
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { query?: { kind: string } };
+      expect(body.query?.kind).toBe('getItem');
+      const item = {
+        id: 'ed-1', title: 'Cloud item', status: 'next', description: 'cloud',
+        ...(notes === undefined ? {} : { notes }),
+      };
+      return new Response(JSON.stringify({ kind: 'item', value: { scope_id: 'editor', item, version: '2', archived: false } }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+
+    const result = await runItemCli(repo, ['verify', 'ed-1', '--check', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      item_id: 'ed-1',
+      verdict: 'likely_open',
+      signals: expectedSignal ? expect.arrayContaining(['notes']) : expect.not.arrayContaining(['notes']),
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('records structured cloud verification through setVerification', async () => {
+    const repo = fixtureRepo();
+    vi.stubEnv('TENBO_CLOUD_API_URL', 'https://example.test/functions/v1/tenbo-api');
+    vi.stubEnv('TENBO_CLOUD_PROJECT_ID', PROJECT_ID);
+    vi.stubEnv('TENBO_CLOUD_AGENT_TOKEN', 'tenbo_agent_secret');
+    const operations: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        query?: { kind: string };
+        command?: { kind: string; status?: string };
+      };
+      const operation = body.query?.kind ?? body.command?.kind ?? 'unknown';
+      operations.push(operation);
+      const item = {
+        id: 'ed-1', title: 'Cloud item', status: 'next', description: 'cloud',
+        done_when: [{ text: 'passing check', check: { run: 'true' } }],
+        ...(body.command?.kind === 'setVerification' ? { verification: { status: body.command.status } } : {}),
+      };
+      return new Response(JSON.stringify({ kind: 'item', value: { scope_id: 'editor', item, version: '2', archived: false } }), { status: 200 });
+    }));
+
+    const result = await runItemCli(repo, ['verify', 'ed-1', '--check', '--agent', 'test-agent', '--json']);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      passed: true,
+      verification: { status: 'verified' },
+    });
+    expect(operations).toEqual(['getItem', 'setVerification']);
+  });
 });
 
 function fixtureRepo(): string {
