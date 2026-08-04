@@ -14,6 +14,14 @@ import { CloudAuthProvider, useCloudAuth } from './auth';
 import { CloudDashboardClient } from './client';
 import type { CloudDashboardConfig } from './config';
 import { CloudItemDialog } from './CloudItemDialog';
+import {
+  DEFAULT_ROADMAP_STATUS_PRESET,
+  ROADMAP_STATUS_OPTIONS,
+  boardStatusesForPreset,
+  statusFilterForPreset,
+  statusPresetLabel,
+  type RoadmapStatusPreset,
+} from './roadmapStatusFilter';
 import { useCloudItems, errorMessage } from './useCloudItems';
 import styles from './CloudDashboard.module.css';
 
@@ -137,13 +145,16 @@ function RoadmapSurface({ project, client, userId }: { project: ProjectSummaryDt
   const [search, setSearch] = useState('');
   const [scopeDraft, setScopeDraft] = useState('');
   const [scope, setScope] = useState('');
+  const [statusPreset, setStatusPreset] = useState<RoadmapStatusPreset>(DEFAULT_ROADMAP_STATUS_PRESET);
   const [archived, setArchived] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemRecordDto | null>(null);
+  const statusFilter = statusFilterForPreset(statusPreset);
   const filters = useMemo<ItemFiltersDto>(() => ({
     archived,
+    ...(statusFilter ? { status: statusFilter } : {}),
     ...(search ? { search } : {}),
     ...(scope ? { scope_id: scope } : {}),
-  }), [archived, search, scope]);
+  }), [archived, search, scope, statusPreset]);
   const auth = useCloudAuth();
   const state = useCloudItems(client, project.id, filters, auth.supabase);
 
@@ -179,6 +190,7 @@ function RoadmapSurface({ project, client, userId }: { project: ProjectSummaryDt
         </div>
         <label className={styles.searchField}><span className="muted-small">Search</span><div><Search size={14} /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="ID, title, or intent" /></div></label>
         <label><span className="muted-small">Scope ID</span><input value={scopeDraft} onChange={(event) => setScopeDraft(event.target.value)} placeholder="All scopes" /></label>
+        <label><span className="muted-small">Status</span><select aria-label="Roadmap status" value={statusPreset} onChange={(event) => setStatusPreset(event.target.value as RoadmapStatusPreset)}>{ROADMAP_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         <button className={styles.secondaryButton}>Apply</button>
         <label className={styles.checkboxLabel}><input type="checkbox" checked={archived} onChange={(event) => setArchived(event.target.checked)} />Archived</label>
         <span className={styles.loadedCount}>{state.items.length} loaded{state.page.has_more ? ' · more available' : ''}</span>
@@ -187,9 +199,9 @@ function RoadmapSurface({ project, client, userId }: { project: ProjectSummaryDt
       {state.partialLiveError && <div className={`${styles.stateBanner} ${styles.warningBanner}`} role="status">Live refresh is partial. Cached items remain usable. {state.partialLiveError}</div>}
       {state.error && <HostedState title="Roadmap unavailable" detail={state.error} action={<button className={styles.primaryButton} onClick={state.reload}>Retry</button>} />}
       {!state.error && state.loading && state.items.length === 0 && <RoadmapSkeleton />}
-      {!state.error && !state.loading && state.items.length === 0 && <HostedState title="No roadmap items match" detail="Adjust the search, scope, or archive filter." />}
+      {!state.error && !state.loading && state.items.length === 0 && <HostedState title={`No ${statusPresetLabel(statusPreset).toLowerCase()} roadmap items match`} detail={statusPreset === 'all' ? 'Adjust the search, scope, or archive filter.' : 'Adjust the filters, or choose All to search every status.'} />}
       {state.items.length > 0 && (view === 'board'
-        ? <RoadmapBoard items={state.items} onOpen={(record) => void openItem(record)} />
+        ? <RoadmapBoard items={state.items} statuses={boardStatusesForPreset(statusPreset)} onOpen={(record) => void openItem(record)} />
         : <RoadmapList items={state.items} onOpen={(record) => void openItem(record)} />)}
       {state.page.has_more && <div className={styles.loadMore}><button className={styles.secondaryButton} disabled={state.loadingMore} onClick={() => void state.loadMore()}>{state.loadingMore ? 'Loading…' : 'Load next page'}</button></div>}
       {selectedItem && <CloudItemDialog client={client} projectId={project.id} initial={selectedItem} userId={userId} role={project.role} onClose={() => setSelectedItem(null)} onChanged={replaceRecord} />}
@@ -197,9 +209,8 @@ function RoadmapSurface({ project, client, userId }: { project: ProjectSummaryDt
   );
 }
 
-function RoadmapBoard({ items, onOpen }: { items: ItemRecordDto[]; onOpen(item: ItemRecordDto): void }) {
-  const columns: Status[] = ['now', 'next', 'later', 'done', 'dropped'];
-  return <main className={styles.board} aria-label="Roadmap board">{columns.map((status) => {
+function RoadmapBoard({ items, statuses, onOpen }: { items: ItemRecordDto[]; statuses: Status[]; onOpen(item: ItemRecordDto): void }) {
+  return <main className={styles.board} aria-label="Roadmap board" style={{ gridTemplateColumns: `repeat(${statuses.length}, minmax(220px, 1fr))` }}>{statuses.map((status) => {
     const records = items.filter((record) => record.item.status === status);
     return <section className={styles.boardColumn} key={status} aria-labelledby={`status-${status}`}><header><h2 id={`status-${status}`}>{status}</h2><span>{records.length}</span></header><div className={styles.cardStack}>{records.map((record) => <ItemCard key={record.item.id} record={record} onOpen={onOpen} />)}{records.length === 0 && <p className={styles.columnEmpty}>No loaded items</p>}</div></section>;
   })}</main>;

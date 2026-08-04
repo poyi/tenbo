@@ -131,6 +131,7 @@
   border-bottom: 1px solid var(--console-mist);
 }
 .filterBar input { min-width: 150px; }
+.filterBar select { min-width: 104px; }
 .segmented { display: flex; gap: 2px; padding: 2px; border-radius: var(--r-md); background: var(--console-iron); }
 .segmented button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 6px; color: var(--console-fog); }
 .segmented button[aria-pressed="true"] { background: var(--console-mist); color: var(--console-snow); }

@@ -41,7 +41,7 @@ describe('CloudDashboardClient bounded human boundary', () => {
     });
     const client = new CloudDashboardClient('https://api.test', 'public-key', () => ({ userId: 'user-1', accessToken: 'human-jwt' }), fetchImpl as typeof fetch);
     await client.listProjects({ limit: 999 });
-    await client.listItems(PROJECT_A, {}, { limit: 999 });
+    await client.listItems(PROJECT_A, { status: ['now', 'next', 'later'] }, { limit: 999 });
     await client.listItems(PROJECT_B, { search: 'cloud' }, { limit: 999 });
 
     expect(requests[0]).not.toHaveProperty('project_id');
@@ -50,6 +50,7 @@ describe('CloudDashboardClient bounded human boundary', () => {
     expect(requests[2].project_id).toBe(PROJECT_B);
     expect((requests[1].query as { page: { limit: number } }).page.limit).toBe(DASHBOARD_ITEM_PAGE_SIZE);
     expect((requests[1].query as { projection: string }).projection).toBe('summary');
+    expect((requests[1].query as { filters: { status: string[] } }).filters.status).toEqual(['now', 'next', 'later']);
     expect(requests.map((request) => (request.query as { kind: string }).kind)).not.toContain('exportProject');
     for (const call of fetchImpl.mock.calls) {
       const headers = call[1]?.headers as Record<string, string>;
