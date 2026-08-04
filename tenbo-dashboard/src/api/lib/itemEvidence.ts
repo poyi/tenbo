@@ -1,4 +1,5 @@
 import { findItem } from './roadmapStore';
+import { normalizeNotes } from './notes';
 import type { Item } from '../../types';
 
 export type ItemEvidenceVerdict = 'likely_done' | 'likely_open' | 'needs_review' | 'inconsistent';
@@ -24,7 +25,7 @@ export function checkItemEvidenceForItem(item: Item): ItemEvidenceReport {
   if (item.verification?.status) signals.push(`verification:${item.verification.status}`);
   if (item.doc_update) signals.push(`doc_update:${item.doc_update}`);
   if (item.links?.some((link) => link.startsWith('commit:'))) signals.push('commit_link');
-  if (item.notes?.trim()) signals.push('notes');
+  if (normalizeNotes(item.notes).trim()) signals.push('notes');
   if (item.done_when?.length) signals.push(`done_when:${item.done_when.length}`);
   if (item.files_to_read?.length) signals.push(`files_to_read:${item.files_to_read.length}`);
 
