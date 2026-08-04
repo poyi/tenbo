@@ -8,6 +8,7 @@ import {
 } from '../contracts/tenbo';
 import { cloudError, messageOf } from './HttpTenboTransport';
 import { defaultFetch } from './defaultFetch';
+import { normalizeCloudCommandResult, normalizeCloudQueryResult } from './normalizeCloudResults';
 
 export interface HumanHttpTenboTransportOptions {
   endpoint: string;
@@ -26,15 +27,15 @@ export class HumanHttpTenboTransport implements TenboGatewayPort {
     this.fetchImpl = options.fetchImpl ?? defaultFetch;
   }
 
-  query(request: QueryEnvelopeDto): Promise<TenboQueryResult> {
-    return this.post<TenboQueryResult>(request);
+  async query(request: QueryEnvelopeDto): Promise<TenboQueryResult> {
+    return normalizeCloudQueryResult(await this.post(request));
   }
 
-  command(request: CommandEnvelopeDto): Promise<TenboCommandResult> {
-    return this.post<TenboCommandResult>(request);
+  async command(request: CommandEnvelopeDto): Promise<TenboCommandResult> {
+    return normalizeCloudCommandResult(await this.post(request));
   }
 
-  private async post<T>(body: unknown): Promise<T> {
+  private async post(body: unknown): Promise<unknown> {
     const credential = typeof this.options.credential === 'function' ? await this.options.credential() : this.options.credential;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -52,6 +53,6 @@ export class HumanHttpTenboTransport implements TenboGatewayPort {
     try { payload = text ? JSON.parse(text) : null; }
     catch { throw new TenboContractError('unsupported', `Tenbo cloud returned non-JSON HTTP ${response.status}`); }
     if (!response.ok) throw cloudError(response.status, payload);
-    return payload as T;
+    return payload;
   }
 }
