@@ -106,7 +106,9 @@ ${topLevelItemHelpLines().join('\n')}
   tenbo-dashboard context feature  Fetch agent planning context for a natural-language request
                                    --query "<request>" [--json]
   tenbo-dashboard context session  Deterministic session-gate briefing bundle [--json]
-  tenbo-dashboard context item <id>  Deterministic per-item context bundle [--json]
+  tenbo-dashboard context item <id>  Deterministic per-item context bundle
+                                   [--document-mode summary|section|full] [--json]
+  tenbo-dashboard item document-show <docId>  Full attached-document content [--json]
   tenbo-dashboard impact           Map git changes to affected layers, docs, items,
                                    and verification checks [--since <ref>] [--json]
   tenbo-dashboard index            Build or refresh the derived source index [--if-stale] [--json]
