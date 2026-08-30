@@ -372,6 +372,15 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
       return serialize({ ok: true, document: result.value }, json, `${result.value.path} section updated\n`);
     }
 
+    if (command === 'document-show') {
+      // x-117 — the read half of the document commands. Agents told to "read
+      // the spec" only ever had the ~300-char context stub; getDocument was
+      // wired end-to-end but never exposed.
+      const result = await client.query({ kind: 'getDocument', document_id: itemId });
+      if (result.kind !== 'document') throw new Error(`expected document, received ${result.kind}`);
+      return serialize({ ok: true, document: result.value }, json, `${itemId} fetched\n`);
+    }
+
     if (command === 'document-versions') {
       const result = await client.query({ kind: 'getDocumentVersions', document_id: itemId });
       if (result.kind !== 'documentVersionPage') throw new Error(`expected documentVersionPage, received ${result.kind}`);

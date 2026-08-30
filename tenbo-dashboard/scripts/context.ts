@@ -9,7 +9,7 @@ import { overlayDirtyGitContext } from '../src/cloud/trustedGitDocuments';
 const USAGE = 'Usage: tenbo context <feature|session|item> ... [--json]\n'
   + '  tenbo context feature --query "<request>" [--json]\n'
   + '  tenbo context session [--json]\n'
-  + '  tenbo context item <id> [--json]';
+  + '  tenbo context item <id> [--document-mode summary|section|full] [--json]';
 
 export function runContextCli(repoRoot: string, args: string[]): CliResult {
   const cloud = loadCloudConfig({ repoRoot, optional: true });
@@ -73,8 +73,17 @@ async function runCloudContextCli(repoRoot: string, args: string[], cloud: NonNu
       query = { kind: 'searchContext', query: text };
     } else if (command === 'session') query = { kind: 'getSessionContext' };
     else if (command === 'item') {
-      const [, itemId] = positionalArgs(args); if (!itemId) return misuse('Usage: tenbo context item <id> [--json]', json);
-      query = { kind: 'getItemContext', item_id: itemId };
+      // x-117 — `--document-mode full` is the read path agents were pointed at
+      // ("read the spec") while the CLI silently always sent the summary stub.
+      // The flag takes a value, so it must be declared to positionalArgs or the
+      // mode string would be read as the item id (the td-032 class).
+      const [, itemId] = positionalArgs(args, { valueFlags: ['--document-mode'] });
+      if (!itemId) return misuse('Usage: tenbo context item <id> [--document-mode summary|section|full] [--json]', json);
+      const documentMode = readOption(args, '--document-mode');
+      if (documentMode !== undefined && documentMode !== 'summary' && documentMode !== 'section' && documentMode !== 'full') {
+        return misuse('context item: --document-mode must be summary, section, or full', json);
+      }
+      query = { kind: 'getItemContext', item_id: itemId, ...(documentMode ? { document_mode: documentMode } : {}) };
     } else return misuse(USAGE, json);
     const result = await new CliTenboClient(repoRoot, { cloudConfig: cloud }).query(query);
     if (result.kind !== 'context') throw new Error(`expected context, received ${result.kind}`);
