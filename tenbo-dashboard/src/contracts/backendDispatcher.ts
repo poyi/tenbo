@@ -40,6 +40,8 @@ export async function dispatchBackendQuery(backend: TenboBackendPorts, request: 
       const result = await backend.project.history(query.item_id, query.page);
       return { kind: 'mutationHistory', value: result.entries, page: result.page };
     }
+    case 'getProjectIdentity':
+      return { kind: 'projectIdentity', value: await backend.project.getIdentity() };
     case 'exportProject':
       return { kind: 'projectExport', value: await backend.project.exportProject() };
     default:

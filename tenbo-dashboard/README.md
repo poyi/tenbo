@@ -139,12 +139,44 @@ from roadmap cutover replacement and remains an explicit admin-only operation.
 Trusted Git projections never accept document content as a CLI argument. The
 tool requires a full commit SHA, obtains exact bytes with `git show
 <sha>:<path>`, verifies repository identity and SHA-256, then invokes the
-admin-only ingestion command:
+existing server-authorized ingestion command (editor or admin). Destination
+identity comes from the project-scoped `getProjectIdentity` query, returning only
+`id` and `repository`; ingestion never calls `exportProject`. Project authentication
+and the server's repository/path/hash checks remain mandatory. Export, import,
+recovery, and promotion finalization retain their privileged permissions.
+Explicit environment/external-profile credentials still override a repository
+capability. Missing identity, unsupported gateways, and authorization failures
+stop the command without export retries or local planning fallbacks:
 
 ```sh
 tenbo-dashboard cloud ingest-git --commit <full-sha> --path .tenbo/overview.md
 tenbo-dashboard cloud dirty-overlay --commit <full-sha> --path .tenbo/overview.md
 ```
+
+### Upgrade from 0.15.2-cloudfix.4
+
+The versioned CLI artifact is `tenbo-dashboard-0.15.2-cloudfix.5.tgz`.
+Deploy the matching Tenbo gateway first: it must support `getProjectIdentity`
+and capability matrix v2 (editor Git ingestion, privileged export unchanged).
+No database migration or credential rotation is required. Older gateways fail
+closed; upgrading only the CLI is insufficient.
+
+For Ionic-design-system's vendored pin, copy the artifact to `vendor/`, change
+`devDependencies.tenbo-dashboard` to
+`file:vendor/tenbo-dashboard-0.15.2-cloudfix.5.tgz`, then run `pnpm install` and
+commit the artifact, package manifest, and lockfile together. Verify the installed
+package version before rerunning the pending sync:
+
+```sh
+node -p "require('tenbo-dashboard/package.json').version"
+npx tenbo-dashboard cloud ingest-git --commit <full-sha> --path AGENTS.md --json
+git show <full-sha>:AGENTS.md | shasum -a 256
+npx tenbo-dashboard context feature --query 'AGENTS.md' --json
+```
+
+Compare `document.content_hash` with the exact `git show` byte hash and verify
+that context returns the expected document path. Do not use a worktree-file hash:
+committed bytes may differ. Keep sync incomplete on any API/hash/retrieval failure.
 
 ## What is tenbo?
 

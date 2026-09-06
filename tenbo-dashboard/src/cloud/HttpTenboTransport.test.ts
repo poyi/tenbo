@@ -139,6 +139,16 @@ describe('external cloud configuration', () => {
       repoRoot: repo,
       env: { [CLOUD_ENV.agentToken]: `tenbo_agent_${'e'.repeat(48)}` },
     })).toMatchObject({ credential: { type: 'agent', token: `tenbo_agent_${'e'.repeat(48)}` } });
+
+    const externalRoot = mkdtempSync(path.join(os.tmpdir(), 'tenbo-external-profile-'));
+    roots.push(externalRoot);
+    const profile = path.join(externalRoot, 'profile.json');
+    writeFileSync(profile, JSON.stringify({ agent_token: `tenbo_agent_${'p'.repeat(48)}` }), { mode: 0o600 });
+    expect(loadCloudConfig({ repoRoot: repo, env: { [CLOUD_ENV.credentialsFile]: profile } }))
+      .toMatchObject({ credential: { type: 'agent', token: `tenbo_agent_${'p'.repeat(48)}` } });
+    writeFileSync(profile, JSON.stringify({ human_jwt: 'explicit-human-session' }));
+    expect(loadCloudConfig({ repoRoot: repo, env: { [CLOUD_ENV.credentialsFile]: profile } }))
+      .toMatchObject({ credential: { type: 'human', jwt: 'explicit-human-session' } });
   });
 });
 

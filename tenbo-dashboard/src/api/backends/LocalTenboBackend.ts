@@ -427,6 +427,10 @@ class LocalProjectPort implements ProjectPort {
     };
   }
 
+  async getIdentity(): Promise<never> {
+    throw new TenboContractError('unsupported', 'project identity is available only through a cloud backend');
+  }
+
   async exportProject(): Promise<JsonValue> {
     return jsonValue(readState(this.repoRoot));
   }

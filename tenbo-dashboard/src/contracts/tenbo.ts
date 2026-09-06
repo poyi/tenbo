@@ -15,7 +15,7 @@ import type {
  */
 export const TENBO_SCHEMA_VERSION = 1 as const;
 /** Package/protocol release sent to the gateway for project minimum-version enforcement. */
-export const TENBO_CLIENT_VERSION = '0.15.0' as const;
+export const TENBO_CLIENT_VERSION = '0.15.2-cloudfix.5' as const;
 /** Epoch increments only when a project requires a non-backward-compatible backend contract. */
 export const TENBO_BACKEND_EPOCH = 1 as const;
 export const DEFAULT_PAGE_SIZE = 50;
@@ -257,6 +257,7 @@ export interface ContextResultDto {
 }
 
 export type TenboQuery =
+  | { kind: 'getProjectIdentity' }
   | { kind: 'listProjects'; page?: PageRequestDto }
   | { kind: 'listItems'; filters?: ItemFiltersDto; page?: PageRequestDto; projection?: 'full' | 'summary' }
   | { kind: 'getItem'; item_id: string; include_archived?: boolean }
@@ -298,6 +299,7 @@ export type MutationHistoryEntryDto = {
 };
 
 export type TenboQueryResult =
+  | { kind: 'projectIdentity'; value: ProjectIdentityDto }
   | { kind: 'projectPage'; value: ProjectPageDto }
   | { kind: 'itemPage'; value: ItemPageDto }
   | { kind: 'item'; value: ItemRecordDto }
@@ -536,7 +538,13 @@ export interface PlanningDocumentPort {
   }>, actor: ActorDto): Promise<TenboCommandResult>;
 }
 
+export interface ProjectIdentityDto {
+  id: string;
+  repository: string;
+}
+
 export interface ProjectPort {
+  getIdentity(): Promise<ProjectIdentityDto>;
   history(itemId: string | undefined, page?: PageRequestDto): Promise<{ entries: MutationHistoryEntryDto[]; page: PageMetaDto }>;
   exportProject(): Promise<JsonValue>;
   importProject(manifest: JsonValue, actor: ActorDto, replace?: boolean): Promise<TenboCommandResult>;

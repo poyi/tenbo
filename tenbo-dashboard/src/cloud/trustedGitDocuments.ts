@@ -103,8 +103,8 @@ export async function ingestExactCommitGitDocument(
   documentPath: string,
   actor: ActorDto,
 ): Promise<GitDocumentDto> {
-  const destination = await ports.project.exportProject();
-  const repository = exportedRepository(destination);
+  const { repository } = await ports.project.getIdentity();
+  if (typeof repository !== 'string' || !repository.trim()) throw new Error('cloud project identity did not include a non-empty repository');
   const document = readExactCommitGitDocument(repoRoot, commitSha, documentPath, repository);
   const result = await ports.gitDocuments.execute({ kind: 'ingestGitDocument', ...document }, actor);
   if (result.kind !== 'gitDocument') throw new Error(`expected gitDocument result, received ${result.kind}`);
@@ -153,15 +153,6 @@ function overlayValue(repoRoot: string, value: JsonValue): JsonValue {
     if (overlay) return overlay as unknown as JsonValue;
   }
   return Object.fromEntries(Object.entries(row).map(([key, child]) => [key, overlayValue(repoRoot, child)]));
-}
-
-function exportedRepository(value: JsonValue): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('cloud export did not include project metadata');
-  const project = value.project;
-  if (!project || typeof project !== 'object' || Array.isArray(project) || typeof project.repository !== 'string') {
-    throw new Error('cloud export did not include project.repository');
-  }
-  return project.repository;
 }
 
 function normalizeGitPath(value: string): string {
