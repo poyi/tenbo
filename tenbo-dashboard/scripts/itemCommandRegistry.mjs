@@ -116,17 +116,17 @@ export const ITEM_COMMANDS = [
   },
   {
     name: 'set-status',
-    usage: 'tenbo-dashboard item set-status <id> <now|next|later|done|dropped> [--json]',
+    usage: 'tenbo-dashboard item set-status <id> <now|next|later|done|dropped> [--expected-version <version> (cloud only)] [--json]',
     summary: 'Set the roadmap status.',
   },
   {
     name: 'add-note',
-    usage: 'tenbo-dashboard item add-note <id> "<note>" [--json]',
+    usage: 'tenbo-dashboard item add-note <id> "<note>" [--expected-version <version> (cloud only)] [--json]',
     summary: 'Append a dated item note.',
   },
   {
     name: 'verify',
-    usage: 'tenbo-dashboard item verify <id> --check [--json]',
+    usage: 'tenbo-dashboard item verify <id> --check [--expected-version <version> (cloud only)] [--json]',
     summary: 'Check whether recorded evidence matches completion state.',
     details: [
       'When done_when has structured `check:` entries, --check EXECUTES each',
@@ -134,25 +134,25 @@ export const ITEM_COMMANDS = [
       "item's verification. Entries without a check are reported \"manual\"",
       '(not auto-passed). Execution only ever happens on this explicit call.',
       'tenbo-dashboard item verify <id> --status <not_required|pending_live|verified|failed>',
-      '                                  [--evidence "<text>"] [--note "<text>"] [--json]',
+      '                                  [--evidence "<text>"] [--note "<text>"] [--expected-version <version> (cloud only)] [--json]',
     ],
   },
   {
     name: 'doc-update',
-    usage: 'tenbo-dashboard item doc-update <id> --date <today|YYYY-MM-DD> [--json]',
+    usage: 'tenbo-dashboard item doc-update <id> --date <today|YYYY-MM-DD> [--expected-version <version> (cloud only)] [--json]',
     summary: 'Record documentation freshness for an item.',
     details: [
-      'tenbo-dashboard item doc-update <id> --skipped --reason "<text>" [--json]',
+      'tenbo-dashboard item doc-update <id> --skipped --reason "<text>" [--expected-version <version> (cloud only)] [--json]',
     ],
   },
   {
     name: 'complete',
-    usage: 'tenbo-dashboard item complete <id> --evidence "<text>" [--doc-update today|YYYY-MM-DD] [--commit <sha>] [--verification <status>] [--json]',
+    usage: 'tenbo-dashboard item complete <id> --evidence "<text>" [--doc-update today|YYYY-MM-DD] [--commit <sha>] [--verification <status>] [--expected-version <version> (cloud only)] [--json]',
     summary: 'Complete status, verification, docs, and optional commit link in one transaction.',
   },
   {
     name: 'link-commit',
-    usage: 'tenbo-dashboard item link-commit <id> <sha> [--json]',
+    usage: 'tenbo-dashboard item link-commit <id> <sha> [--expected-version <version> (cloud only)] [--json]',
     summary: 'Attach a commit link to an item.',
   },
   {

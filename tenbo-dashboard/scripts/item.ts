@@ -122,6 +122,7 @@ async function performCompatibleMutation(
   repoRoot: string,
   op: MutationOp,
   agent: string,
+  expectedVersion?: string,
 ): Promise<WriteResult> {
   if (!client.isCloud) return performMutation(repoRoot, op, agent);
   const command = op.op === 'set-status' ? { kind: 'setStatus' as const, item_id: op.itemId, status: assertValidStatusForCli(op.status) }
@@ -132,7 +133,7 @@ async function performCompatibleMutation(
     : { kind: 'completeItem' as const, item_id: op.itemId, evidence: op.evidence,
         ...(op.docUpdate ? { doc_update: op.docUpdate } : {}), ...(op.commit ? { commit: op.commit } : {}),
         ...(op.verificationStatus ? { verification_status: op.verificationStatus as any } : {}) };
-  const result = typedItemResult(await performTypedCommand(client, command, agent));
+  const result = typedItemResult(await performTypedCommand(client, { ...command, ...(expectedVersion !== undefined ? { expected_version: expectedVersion } : {}) }, agent));
   return { scopeId: result.value.scope_id, filePath: '', item: result.value.item, validation: result.validation ?? { errors: [], warnings: [] } };
 }
 
@@ -208,6 +209,22 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
 
   try {
     const client = new CliTenboClient(repoRoot);
+    const compatibilityMutation = ['set-status', 'add-note', 'verify', 'doc-update', 'complete', 'link-commit'].includes(command);
+    let expectedVersion: string | undefined;
+    if (compatibilityMutation) {
+      for (const flag of ['--fencing-token', '--owner']) {
+        if (args.some(arg => arg === flag || arg.startsWith(`${flag}=`))) {
+          return misuse(`${flag} is not supported by item ${command}`, json);
+        }
+      }
+      if (args.some(arg => arg.startsWith('--expected-version='))) return misuse('use --expected-version <version>', json);
+      if (hasFlag(args, '--expected-version')) {
+        expectedVersion = requiredOption(args, '--expected-version');
+        if (!expectedVersion.trim() || expectedVersion.startsWith('--')) return misuse('--expected-version requires a value', json);
+        if (!client.isCloud) return misuse('--expected-version is not supported by the local compatibility mutation path', json);
+      }
+    }
+
     if (command === 'allocate-id') {
       const result = await performTypedCommand(client, { kind: 'allocateItemId', prefix: itemId }, agent);
       if (result.kind !== 'allocation') throw new Error(`expected allocation result, received ${result.kind}`);
@@ -492,13 +509,13 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
 
     if (command === 'set-status') {
       if (!value) return misuse(`Usage: ${findItemCommand('set-status')?.usage ?? 'tenbo-dashboard item set-status <id> <status>'}`, json);
-      const result = await performCompatibleMutation(client, repoRoot, { op: 'set-status', itemId, status: value }, agent);
+      const result = await performCompatibleMutation(client, repoRoot, { op: 'set-status', itemId, status: value }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} status: ${result.item.status}\n`);
     }
 
     if (command === 'add-note') {
       if (!value) return misuse(`Usage: ${findItemCommand('add-note')?.usage ?? 'tenbo-dashboard item add-note <id> <note>'}`, json);
-      const result = await performCompatibleMutation(client, repoRoot, { op: 'add-note', itemId, note: value }, agent);
+      const result = await performCompatibleMutation(client, repoRoot, { op: 'add-note', itemId, note: value }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} note added\n`);
     }
 
@@ -525,7 +542,7 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
         const evidence = results.map(formatCheckEvidence);
         const passedCount = summary.checkedCount - summary.failedCount;
         const note = `item verify --check: ${passedCount}/${summary.checkedCount} structured check(s) passed, ${summary.manualCount} manual entr${summary.manualCount === 1 ? 'y' : 'ies'} not executed`;
-        const mutated = await performCompatibleMutation(client, repoRoot, { op: 'verify', itemId, status, evidence, note }, agent);
+        const mutated = await performCompatibleMutation(client, repoRoot, { op: 'verify', itemId, status, evidence, note }, agent, expectedVersion);
 
         const report = {
           ...evidenceReport,
@@ -550,7 +567,7 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
         status,
         evidence: readRepeated(args, '--evidence'),
         note: readOption(args, '--note'),
-      }, agent);
+      }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} verification: ${result.item.verification?.status}\n`);
     }
 
@@ -562,7 +579,7 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
       if (skipped && !reason) return misuse('Usage: tenbo-dashboard item doc-update <id> --skipped --reason "<text>"', json);
       const today = new Date().toISOString().slice(0, 10);
       const docUpdate = skipped ? `skipped — ${reason}` : date === 'today' ? today : date;
-      const result = await performCompatibleMutation(client, repoRoot, { op: 'doc-update', itemId, docUpdate: docUpdate ?? today }, agent);
+      const result = await performCompatibleMutation(client, repoRoot, { op: 'doc-update', itemId, docUpdate: docUpdate ?? today }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} doc_update: ${result.item.doc_update}\n`);
     }
 
@@ -581,13 +598,13 @@ export async function runItemCli(repoRoot: string, args: string[]): Promise<CliR
         ...(docUpdate ? { docUpdate } : {}),
         ...(commit ? { commit } : {}),
         ...(verificationStatus ? { verificationStatus } : {}),
-      }, agent);
+      }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} completed\n`);
     }
 
     if (command === 'link-commit') {
       if (!value) return misuse(`Usage: ${findItemCommand('link-commit')?.usage ?? 'tenbo-dashboard item link-commit <id> <sha>'}`, json);
-      const result = await performCompatibleMutation(client, repoRoot, { op: 'link-commit', itemId, commit: value }, agent);
+      const result = await performCompatibleMutation(client, repoRoot, { op: 'link-commit', itemId, commit: value }, agent, expectedVersion);
       return serialize({ ok: true, scope: result.scopeId, item: result.item, validation: result.validation }, json, `${itemId} linked commit: ${value}\n`);
     }
 
