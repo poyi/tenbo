@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { readState } from '../tenboFs';
+import { readStaticState } from '../tenboFs';
 import { resolveLayerFiles } from '../health/layerFiles';
 import { buildStructuralGraph } from '../health/structuralGraph';
 import { computeSourceIndexInputs, SOURCE_INDEX_SCHEMA_VERSION } from './store';
@@ -68,7 +68,8 @@ function scopeOwnership(repoRoot: string, scope: Scope) {
 }
 
 export function buildSourceIndex(repoRoot: string, options: BuildSourceIndexOptions = {}): SourceIndex {
-  const state = readState(repoRoot);
+  // Source ownership is Git-owned in every mode; roadmap items never feed this index.
+  const state = readStaticState(repoRoot);
   const warnings: string[] = [];
   const indexedFiles = new Map<string, { scope: string; layers: string[] }>();
   const indexLayers: SourceIndexLayer[] = [];

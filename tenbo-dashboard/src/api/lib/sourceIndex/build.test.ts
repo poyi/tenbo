@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildSourceIndex } from './build';
@@ -139,5 +139,18 @@ describe('buildSourceIndex', () => {
         files: expect.arrayContaining(['skill/src/helper.ts', 'skill/src/use.ts']),
       }),
     ]));
+  });
+
+  it('derives the same index from architecture with or without legacy roadmap data', () => {
+    const now = new Date('2026-06-30T00:00:00.000Z');
+    const legacy = buildSourceIndex(dir, { now });
+    for (const scope of ['dashboard', 'skill']) {
+      rmSync(path.join(dir, `.tenbo/scopes/${scope}/roadmap.yaml`));
+    }
+    write('.tenbo/cloud-project.json', JSON.stringify({ mode: 'cloud_canonical' }));
+
+    expect(buildSourceIndex(dir, { now })).toEqual(legacy);
+    expect(existsSync(path.join(dir, '.tenbo/scopes/dashboard/roadmap.yaml'))).toBe(false);
+    expect(existsSync(path.join(dir, '.tenbo/scopes/skill/roadmap.yaml'))).toBe(false);
   });
 });
