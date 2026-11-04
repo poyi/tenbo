@@ -69,6 +69,14 @@ export class CloudTenboBackend implements TenboGatewayPort {
       },
       gitDocuments: { execute: command },
       project: {
+        getIdentity: async () => {
+          const result = await query({ kind: 'getProjectIdentity' });
+          if (result.kind !== 'projectIdentity') throw new TenboContractError('invalid_request', `expected projectIdentity, received ${result.kind}`);
+          if (result.value?.id !== this.projectId || typeof result.value.repository !== 'string' || !result.value.repository.trim()) {
+            throw new TenboContractError('invalid_request', 'cloud project identity must include the destination project id and a non-empty repository');
+          }
+          return { id: result.value.id, repository: result.value.repository };
+        },
         history: async (itemId, page) => {
           const result = await query({ kind: 'getMutationHistory', item_id: itemId, page });
           if (result.kind !== 'mutationHistory') throw new TenboContractError('invalid_request', `expected mutationHistory, received ${result.kind}`);

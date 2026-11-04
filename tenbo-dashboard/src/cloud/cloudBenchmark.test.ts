@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TENBO_CLIENT_VERSION } from '../contracts/tenbo';
 import type { CommandEnvelopeDto, QueryEnvelopeDto, TenboCommandResult, TenboGatewayPort, TenboQueryResult } from '../contracts/tenbo';
 import { parseCloudBenchmarkFixture, runCloudBenchmark } from './cloudBenchmark';
 
@@ -39,7 +40,7 @@ function fixture() {
     format: 'tenbo-cloud-benchmark-v1', schema_version: 1,
     project_id: '9bb1252c-737c-4188-8772-9bf35ab71124',
     source: { manifest_hash: 'b'.repeat(64), commit_sha: '8'.repeat(40), counts: { items: 1555 } },
-    deployment: { project_ref: 'dopxhwhlwlwigobnokvl', region: 'West US (Oregon)', api_schema_version: 1, backend_epoch: 1, minimum_cli_version: '0.15.0' },
+    deployment: { project_ref: 'dopxhwhlwlwigobnokvl', region: 'West US (Oregon)', api_schema_version: 1, backend_epoch: 1, minimum_cli_version: TENBO_CLIENT_VERSION },
     response_caps: { feature: { rows: 32, bytes: 65_536, tokens: 4_000, estimator: 'tenbo-token-estimator-v1' }, item_page_rows: 50 },
     samples: { warmups: 3, warm: 30, cold_processes: 5 },
     gates_ms: { item_brief_warm_p95: 300, filtered_items_warm_p95: 300, feature_context_warm_p95: 2_000 },

@@ -51,6 +51,28 @@ describe('HttpTenboTransport', () => {
       .rejects.toMatchObject({ name: 'TenboContractError', code: 'permission_denied', message: 'wrong_project: denied' });
     expect(calls).toBe(1);
   });
+
+  it('normalizes cloud item notes before they cross the transport boundary', async () => {
+    const transport = new HttpTenboTransport({
+      endpoint: 'https://project.supabase.co/functions/v1/tenbo-api',
+      credential: { type: 'agent', token: 'tenbo_agent_secret' },
+      fetchImpl: (async () => new Response(JSON.stringify({
+        kind: 'item',
+        value: {
+          scope_id: 'editor',
+          version: '2',
+          archived: false,
+          item: { id: 'x-096', title: 'Cloud item', status: 'next', description: 'cloud', notes: ['first', '- second'] },
+        },
+      }), { status: 200 })) as typeof fetch,
+    });
+
+    await expect(transport.query({
+      schema_version: TENBO_SCHEMA_VERSION,
+      project_id: PROJECT_ID,
+      query: { kind: 'getItem', item_id: 'x-096' },
+    })).resolves.toMatchObject({ kind: 'item', value: { item: { notes: '- first\n- second' } } });
+  });
 });
 
 describe('external cloud configuration', () => {
@@ -117,6 +139,16 @@ describe('external cloud configuration', () => {
       repoRoot: repo,
       env: { [CLOUD_ENV.agentToken]: `tenbo_agent_${'e'.repeat(48)}` },
     })).toMatchObject({ credential: { type: 'agent', token: `tenbo_agent_${'e'.repeat(48)}` } });
+
+    const externalRoot = mkdtempSync(path.join(os.tmpdir(), 'tenbo-external-profile-'));
+    roots.push(externalRoot);
+    const profile = path.join(externalRoot, 'profile.json');
+    writeFileSync(profile, JSON.stringify({ agent_token: `tenbo_agent_${'p'.repeat(48)}` }), { mode: 0o600 });
+    expect(loadCloudConfig({ repoRoot: repo, env: { [CLOUD_ENV.credentialsFile]: profile } }))
+      .toMatchObject({ credential: { type: 'agent', token: `tenbo_agent_${'p'.repeat(48)}` } });
+    writeFileSync(profile, JSON.stringify({ human_jwt: 'explicit-human-session' }));
+    expect(loadCloudConfig({ repoRoot: repo, env: { [CLOUD_ENV.credentialsFile]: profile } }))
+      .toMatchObject({ credential: { type: 'human', jwt: 'explicit-human-session' } });
   });
 });
 

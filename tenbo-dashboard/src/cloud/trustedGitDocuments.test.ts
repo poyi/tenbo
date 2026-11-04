@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { CloudTenboBackend } from '../api/backends/CloudTenboBackend';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -56,7 +58,7 @@ describe('trusted exact-commit Git ingestion', () => {
     expect(() => readExactCommitGitDocument(repo, sha, 'missing.md')).toThrow(/git show failed/);
   });
 
-  it('derives bytes from git show before sending the admin command', async () => {
+  it('derives bytes from git show without exporting the project', async () => {
     const repo = fixtureRepo();
     writeFileSync(path.join(repo, 'guide.md'), 'trusted\n');
     git(repo, ['add', '.']); git(repo, ['commit', '-m', 'one']);
@@ -68,11 +70,59 @@ describe('trusted exact-commit Git ingestion', () => {
         content: command.content, version: '1', archived: false as const },
     }));
     const ports = {
-      project: { exportProject: async () => ({ project: { repository: 'https://example.test/repo.git' } }) },
+      project: { getIdentity: async () => ({ id: 'project', repository: 'https://example.test/repo.git' }), exportProject: vi.fn(() => { throw new Error('editor cannot execute exportProject'); }) },
       gitDocuments: { execute },
     } as unknown as TenboBackendPorts;
-    await ingestExactCommitGitDocument(ports, repo, sha, 'guide.md', { id: 'ci', type: 'agent' });
+    const result = await ingestExactCommitGitDocument(ports, repo, sha, 'guide.md', { id: 'ci', type: 'agent' });
+    expect(result.content_hash).toBe(createHash('sha256').update(execFileSync('git', ['show', `${sha}:guide.md`], { cwd: repo })).digest('hex'));
+    expect(ports.project.exportProject).not.toHaveBeenCalled();
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ content: 'trusted\n', commit_sha: sha }), { id: 'ci', type: 'agent' });
+  });
+
+  it.each([
+    ['wrong repository', { id: 'project', repository: 'https://example.test/other.git' }, 'guide.md', /does not match/],
+    ['empty repository', { id: 'project', repository: '' }, 'guide.md', /repository/],
+    ['wrong project', { id: 'other', repository: 'https://example.test/repo.git' }, 'guide.md', /destination project/],
+    ['invalid path', { id: 'project', repository: 'https://example.test/repo.git' }, '../guide.md', /escaped/],
+  ] as const)('fails closed for %s before ingestion', async (_label, identity, documentPath, expected) => {
+    const repo = fixtureRepo();
+    writeFileSync(path.join(repo, 'guide.md'), 'trusted\n');
+    git(repo, ['add', '.']); git(repo, ['commit', '-m', 'one']);
+    const command = vi.fn();
+    const query = vi.fn(async () => ({ kind: 'projectIdentity' as const, value: identity }));
+    const backend = new CloudTenboBackend('project', { query, command });
+    await expect(ingestExactCommitGitDocument(backend.ports, repo, git(repo, ['rev-parse', 'HEAD']).trim(), documentPath, { id: 'ci', type: 'agent' })).rejects.toThrow(expected);
+    expect(command).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'project', query: { kind: 'getProjectIdentity' } }));
+  });
+
+  it('propagates identity authorization/unsupported errors without export or local fallback', async () => {
+    for (const message of ['permission_denied: unauthorized project', 'unsupported query: getProjectIdentity']) {
+      const query = vi.fn(async () => { throw new Error(message); });
+      const command = vi.fn();
+      const backend = new CloudTenboBackend('project', { query, command });
+      await expect(ingestExactCommitGitDocument(backend.ports, '/nonexistent', 'a'.repeat(40), 'AGENTS.md', { id: 'ci', type: 'agent' })).rejects.toThrow(message);
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(command).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejects a returned hash mismatch after reading exact UTF-8/CRLF git bytes', async () => {
+    const repo = fixtureRepo();
+    git(repo, ['config', 'core.autocrlf', 'false']);
+    const bytes = Buffer.from('Documentation café\r\nno trailing newline');
+    writeFileSync(path.join(repo, 'guide.md'), bytes);
+    git(repo, ['add', '.']); git(repo, ['commit', '-m', 'one']);
+    writeFileSync(path.join(repo, 'guide.md'), 'dirty content');
+    const command = vi.fn(async (envelope: any) => {
+      expect(envelope.command.content_hash).toBe(createHash('sha256').update(bytes).digest('hex'));
+      expect(Buffer.from(envelope.command.content)).toEqual(bytes);
+      return { kind: 'gitDocument', value: { content_hash: '0'.repeat(64) } };
+    });
+    const backend = new CloudTenboBackend('project', {
+      query: async () => ({ kind: 'projectIdentity', value: { id: 'project', repository: 'https://example.test/repo.git' } }), command,
+    } as any);
+    await expect(ingestExactCommitGitDocument(backend.ports, repo, git(repo, ['rev-parse', 'HEAD']).trim(), 'guide.md', { id: 'ci', type: 'agent' })).rejects.toThrow(/different Git document hash/);
   });
 
   it('creates a reviewable new file without overwriting repository content', async () => {

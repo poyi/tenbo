@@ -41,7 +41,7 @@ describe('CloudDashboardClient bounded human boundary', () => {
     });
     const client = new CloudDashboardClient('https://api.test', 'public-key', () => ({ userId: 'user-1', accessToken: 'human-jwt' }), fetchImpl as typeof fetch);
     await client.listProjects({ limit: 999 });
-    await client.listItems(PROJECT_A, {}, { limit: 999 });
+    await client.listItems(PROJECT_A, { status: ['now', 'next', 'later'] }, { limit: 999 });
     await client.listItems(PROJECT_B, { search: 'cloud' }, { limit: 999 });
 
     expect(requests[0]).not.toHaveProperty('project_id');
@@ -50,6 +50,7 @@ describe('CloudDashboardClient bounded human boundary', () => {
     expect(requests[2].project_id).toBe(PROJECT_B);
     expect((requests[1].query as { page: { limit: number } }).page.limit).toBe(DASHBOARD_ITEM_PAGE_SIZE);
     expect((requests[1].query as { projection: string }).projection).toBe('summary');
+    expect((requests[1].query as { filters: { status: string[] } }).filters.status).toEqual(['now', 'next', 'later']);
     expect(requests.map((request) => (request.query as { kind: string }).kind)).not.toContain('exportProject');
     for (const call of fetchImpl.mock.calls) {
       const headers = call[1]?.headers as Record<string, string>;
@@ -72,6 +73,29 @@ describe('CloudDashboardClient bounded human boundary', () => {
       command: { kind: 'releaseClaim', item_id: 'x-1', fencing_token: 7 },
     });
     expect(request).not.toHaveProperty('query');
+  });
+
+  it('receives the same normalized notes shape as the agent transport', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      kind: 'itemPage',
+      value: {
+        items: [{
+          scope_id: 'editor', version: '3', archived: false,
+          item: { id: 'ed-1', title: 'Cloud item', status: 'next', description: 'cloud', notes: ['first', 'second'] },
+        }],
+        page: { row_count: 1, has_more: false },
+      },
+    }), { status: 200 }));
+    const client = new CloudDashboardClient(
+      'https://api.test',
+      'public-key',
+      () => ({ userId: 'user-1', accessToken: 'human-jwt' }),
+      fetchImpl as typeof fetch,
+    );
+
+    const page = await client.listItems(PROJECT_A, {});
+
+    expect(page.items[0].item.notes).toBe('- first\n- second');
   });
 });
 
