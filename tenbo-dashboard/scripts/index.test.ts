@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { runIndexCli } from './index';
@@ -62,5 +62,20 @@ describe('index CLI', () => {
     const payload = JSON.parse(result.stdout);
     expect(payload.mode).toBe('reuse');
     expect(readSourceIndex(dir)?.generated_at).toBe(firstGeneratedAt);
+  });
+
+  it('builds and reuses a cloud-canonical source index without restoring a roadmap', () => {
+    rmSync(path.join(dir, '.tenbo/scopes/dashboard/roadmap.yaml'));
+    write('.tenbo/cloud-project.json', JSON.stringify({ mode: 'cloud_canonical' }));
+
+    const first = runIndexCli(dir, ['--if-stale', '--json']);
+    expect(first.exitCode).toBe(0);
+    expect(JSON.parse(first.stdout)).toMatchObject({ ok: true, mode: 'rebuild' });
+    expect(readSourceIndex(dir)?.files.map((file) => file.path)).toContain('tenbo-dashboard/scripts/context.ts');
+
+    const second = runIndexCli(dir, ['--if-stale', '--json']);
+    expect(second.exitCode).toBe(0);
+    expect(JSON.parse(second.stdout)).toMatchObject({ ok: true, mode: 'reuse' });
+    expect(existsSync(path.join(dir, '.tenbo/scopes/dashboard/roadmap.yaml'))).toBe(false);
   });
 });

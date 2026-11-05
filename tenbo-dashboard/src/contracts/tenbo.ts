@@ -15,7 +15,7 @@ import type {
  */
 export const TENBO_SCHEMA_VERSION = 1 as const;
 /** Package/protocol release sent to the gateway for project minimum-version enforcement. */
-export const TENBO_CLIENT_VERSION = '0.15.2-cloudfix.5' as const;
+export const TENBO_CLIENT_VERSION = '0.15.2-cloudfix.7' as const;
 /** Epoch increments only when a project requires a non-backward-compatible backend contract. */
 export const TENBO_BACKEND_EPOCH = 1 as const;
 export const DEFAULT_PAGE_SIZE = 50;
